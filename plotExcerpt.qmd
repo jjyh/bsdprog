@@ -1,0 +1,251 @@
+---
+title: "Biosolids analysis"
+author: "Jane Ho"
+execute:
+  echo: false
+format:
+  html:
+    embed-resources: true
+
+---
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(leaflet)
+library(janitor)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(purrr)
+library(ggplot2)
+library(viridis)
+```
+
+Useable outcomes from the above inventory canvassing work:
+
+1.  Data record & quality gaps will be made evident. Condensed and visualized gaps will be shared to be transparent about the bases (and lacks thereof) for the subsequent outcomes. Regional & logistical (e.g. by VoR) geographical clustering will be plotted & made visible within OCWA for planning reference.
+
+    *Articulate the opportunities lost due to data gaps (rather than it being just a problem) - a social contract of give and get;*
+
+2.  Priorities and risks (capacity or quality hotspots) & opportunities (landfill/cost abnormalities) will be identified tracked in a registry
+
+3.  Benchmarks (e.g. production rates & quality, costs) and action triggers will be established based on a blend of hard limits and quantified distribution from the inventory exercise.
+
+    *build economic case; recognize uncertainty*
+
+4.  With consideration of policies, regulation and historical operations handling, establish a reference "Plinko" board/flowchart of actions. There is potential duplication/cross-feed with:
+
+    1.  Lagoon Listing SD2 (Angela compliance hotspots)
+    2.  Lagoon SOP (consult Raj & James)
+    3.  Ops checklist for residuals handling e.g. pre NASM/haulage checks
+
+5.  Reference information for operations management
+
+    1.  Regulatory Changes Monitoring ("delegate" this to external)
+    2.  Scientific/political/social risk factor scans ("delegate" this to external)
+    3.  VOR & contract/procurement templates for haulage/NASM/disposal
+
+6.  An information gathering "pipeline" protocol that will be published on Sharepoint, such that this exercise is reproducible and which may serve as reference for other IPOTS data gathering efforts.
+
+    *Hardwiring so it works continuously & transparent (trusted)*
+
+
+## Costs
+
+```{r}
+#grab all excel names as a character vector
+#2023 & 2024 are all fake-filled with Biosolids for now
+
+fnames <- fs::dir_ls('data/4-Costing/Payables', regexp = '.XLSX') #gp export was weird - caps 
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_costs <- bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE))%>% 
+  filter(CostCategoryName == 'BIOSOLIDS\\SLUDGE') #%>% won't work b/c 2023 & 2024 has no category columns downloaded #TBD
+
+#TEMPORARY REMOVE ONCE COLUMNS ARE CONSISTENT TBD
+dt_costs <- dt_costs %>% 
+  unite(VendorID, c(VendorID,`Vendor ID`), na.rm = TRUE, remove = TRUE) %>%
+  unite(DescriptionSupplierClientName, c(DescriptionSupplierClientName,`Vendor Name`), na.rm = TRUE, remove = TRUE) %>% 
+  unite(GlPostingDate, c(GlPostingDate,'GL Posting Date'), na.rm = TRUE, remove = TRUE) %>% 
+  unite(Amount, c(Amount, 'Total CAD'), na.rm=TRUE, remove=TRUE)
+
+#vendors just start with 2021
+dt_vendors<-read_excel("data/4-Costing/Payables/2021 BIOSLD_MWSW Regions costs.XLSX", col_names = TRUE) %>% 
+  select("VendorID", "DescriptionSupplierClientName","PAprojname", "GlPostingDate", "Amount") %>% 
+  unique() %>% #in case there are dup charges - don't care
+  drop_na("VendorID") # NAs are all acct actions like accruals & transfers
+
+# number of unique vendors providing biosolids services (82)
+length(unique(dt_vendors$DescriptionSupplierClientName))
+# number of unique "projects" receiving biosolids services
+length(unique(dt_vendors$PAprojname))
+#unique(dt_vendors$PAprojname)
+
+```
+
+```{r}
+#all vendors are too much to visualize: break it up
+#set up levels by total amount
+dt_vendors_summ <- dt_vendors %>%
+  group_by(DescriptionSupplierClientName,VendorID) %>%
+  summarize(invoicesSum = sum(Amount),
+            invoicesCount = n()) %>% 
+  ungroup()
+
+#set order
+dt_vendors_summ %>% 
+  ggplot(aes(x=DescriptionSupplierClientName, y=invoicesSum)) +
+    geom_bar(stat="identity")+
+  #  scale_x_discrete(limits=)
+  coord_flip()
+  
+```
+
+```{r}
+#multiple instances
+# just an indication there're lots of invoices....
+
+
+dt_vendors_summ %>% 
+  dplyr::filter(invoicesCount >1) %>% 
+  ggplot(aes(x=DescriptionSupplierClientName, y = invoicesSum)) +
+  geom_bar(stat="identity")+
+  ylab("Sum of invoices in year, multiple invoicers")+
+  coord_flip()
+
+#cross plot rates, charged hub (waffle)
+```
+```{r}
+#find proportion and maybe focus on the biggest 20?
+library(treemap)
+plot_proportionInvoice<-treemap(dt_vendors_summ, 
+        index = "DescriptionSupplierClientName", vSize = "invoicesSum", type = "index")
+
+#cannot ggplotly this treemap
+```
+
+
+```{r}
+#can do something intermediate above to see which PA ~ vendor
+#too many lines to see - reduce to top 5
+list_vendorsTop<- dt_vendors_summ %>% arrange(desc(invoicesSum)) %>% slice(1:5) %>% select("VendorID","DescriptionSupplierClientName")
+
+dt_vendors_flow<-select(dt_vendors, -c("GlPostingDate")) %>% 
+  inner_join(list_vendorsTop)#clean up before pivot
+
+library(ggsankeyfier)  
+es_long <-
+  pivot_stages_longer(
+    ## the data.frame we wish to pivot:
+    data = dt_vendors_flow,
+    ## the columns that represent the stages:
+    stages_from = c("DescriptionSupplierClientName", "PAprojname"),
+    ## the column that represents the size of the flows:
+    values_from = "Amount"
+  )
+
+pos <- position_sankey(v_space = "auto", order = "descending")
+
+ggplot(es_long,
+       aes(x = stage, y = Amount, group = node,
+           connector = connector, edge_id = edge_id)) +
+  geom_sankeyedge(aes(fill = node), position = pos) +
+  geom_sankeynode(position = pos) +
+  scale_fill_viridis_d() +
+  geom_text(aes(label = node), stat = "sankeynode", position = pos, cex = 2) 
+
+
+# dt_vendors$flowSize<- #dummy
+# dt_vendors<-select(dt_vendors, -c("GlPostingDate", "Amount")) #clean up before pivot
+# 
+# es_long <-
+#   pivot_stages_longer(
+#     ## the data.frame we wish to pivot:
+#     data = dt_vendors,
+#     ## the columns that represent the stages:
+#     stages_from = c("DescriptionSupplierClientName", "PAprojname"),
+#     ## the column that represents the size of the flows:
+#     values_from = "flowSize"
+#   )
+# 
+# ggplot(es_long,
+#        aes(x = stage, y = flowSize, group = node,
+#            connector = connector, edge_id = edge_id)) +
+#   geom_sankeyedge(v_space = "auto") +
+#   geom_sankeynode(v_space = "auto")
+
+#just the 2021 since 2023 and 2024 are missing PA projname
+
+```
+
+```{r}
+#ladder steps year to year value
+dt_vendors_yoy<-select(dt_costs, c("GlPostingDate", "VendorID", "Amount")) %>% 
+  inner_join(list_vendorsTop)#join by DescriptionSupplierClientName / vendor name
+dt_vendors_yoy$GlPostingDate<-as.Date(dt_vendors_yoy$GlPostingDate)
+dt_vendors_yoy$year<-lubridate::year(dt_vendors_yoy$GlPostingDate)
+dt_vendors_yoy$Amount<-as.numeric(dt_vendors_yoy$Amount)
+
+dt_vendors_yoy <- dt_vendors_yoy %>%
+  group_by(DescriptionSupplierClientName,year) %>%
+  summarize(annualSum = sum(Amount)) %>% 
+  ungroup()
+
+# Basic line graph with points
+ggplot(data=dt_vendors_yoy, aes(x=year, y=annualSum, group=DescriptionSupplierClientName, colour = DescriptionSupplierClientName)) +
+  geom_line() +
+  geom_point()
+#  geom_text(check_overlap = TRUE)
+
+```
+
+## Procurement
+```{r, eval = FALSE}
+fnames <- fs::dir_ls('data/4-Costing/Procurement', regexp = 'Biosolids Schedule Master')  
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_procurement <- bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE, 
+                                   skip=5))
+
+#clean up totals and comments at end
+dt_procurement <-dt_procurement %>% slice(1:max(which(!is.na(Hub))))
+
+#break up the mixed column of hubs and facility
+#first line in 2nd column after a blank row is a hub (a hub can also have no sub plants)
+list_hub<-which(is.na(dt_procurement$Hub)) # these are the blank rows preceding a hub
+list_hub<- list_hub+1
+
+dt_hub<- dt_procurement %>% slice(list_hub) %>% drop_na(Hub) #an extra blank row for a missing facility in KW...
+dt_hub<-dt_hub %>% mutate(Facility="hub")
+
+dt_procurement<-dt_procurement %>% mutate(Facility=Hub)
+dt_procurement$Facility[list_hub]<-NA #remove hubs
+dt_procurement$Hub[-list_hub]<-NA #remove facilities
+
+dt_procurement <- dt_procurement %>% 
+  dplyr::filter(!(is.na(Hub) & is.na(Facility)))%>% 
+  fill(Hub) %>% 
+  drop_na(Facility)
+
+#Essex and non-hub(?) Midhurst Valley don't have specific facility rates, need to reinsert back in below  
+dt_procurement<-rbind(dt_procurement, dt_hub %>% subset(!is.na(`Current Vendor`)))
+
+#dt_procurement %>% mutate_at(ends_with(c("Cost", "Price"), as.numeric)) # fails - ends with must be used with selecting; also there is inconsistent column header in price TBD janitor clean all names before
+
+dt_procurement_cost<-dt_procurement %>% 
+  pivot_longer(cols=ends_with("Cost"), names_to = "year", values_to = "cost", 
+               values_transform = list(cost=as.numeric), #there are stray chara typos in cost columns - just coerce to NA
+               names_pattern = "(.*) Cost") #remove suffix from pivoted years
+```
+
+
+```{r, eval = FALSE}
+#let's look at costs (prices still to pivot long)
+p_costRate<-ggplot(dt_procurement_cost, aes(x = year, y = cost, color = Hub))+
+  geom_point()+
+  scale_y_continuous(limits=c(0, 80)) #TEMPORARY get rid of lump sums
+
+library(plotly)
+ggplotly(p_costRate)
+
+```
+
+
+
