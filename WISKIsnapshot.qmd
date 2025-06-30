@@ -29,7 +29,7 @@ rough mass accounting via steps in wwtp - however will likely need to be unique 
 ```{r}
 #grab all excel names as a character vector, assuming multiple quarterly files will be available.  may need more precision if non wiski files are stored
 
-fnames <- fs::dir_ls('data/3-Inventory/', regexp = '.xlsx') 
+fnames <- fs::dir_ls('data/3-Inventory/', regexp = '.xlsx')
 fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
 dt_wiskiBSD <- bind_rows(lapply(fnames, read_excel, sheet = "IH_OL_data", col_names = TRUE, trim_ws=TRUE))
 
@@ -92,8 +92,8 @@ dt_wiskiHaulWeekly<-
   scale_x_continuous(breaks=seq(0,53,1) ) +
   labs(x = "Week Number",
        y = "Weekly Volume (m3)",
-       title = "Haulage recorded in WISKI")+ 
-  labs(caption = "(data recorded in kg are divided by 1000 [rough conversion - majority report in cubic meters]) \n minor StationName changes: removed subpartitions & superfluous: numbers, north/south, 'data', 'quality' ")
+       title = "Haulage recorded in WISKI, 2025 Q1",
+       caption = "(data recorded in kg are divided by 1000 [rough conversion - majority report in cubic meters]) \n minor StationName changes: removed subpartitions & superfluous: numbers, north/south, 'data', 'quality' ")
   #+scale_x_date(date_breaks = "1 month", date_labels = "%b")
 
 #https://forum.posit.co/t/plot-weekly-data-with-monthly-axis-labels/62631/5
@@ -107,8 +107,59 @@ Stats summary
 
 
 
-Quality
+Quality - try TS first
 range - boxplot amongst plants
 pane or filter by process (rely on 2019 canvassing [?] unless metadata shows process changed)
 
+```{r}
+
+fnames <- fs::dir_ls('data/3-Inventory/', regexp = '.xlsx')
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_wiskiLabBSD <- bind_rows(lapply(fnames, read_excel, sheet = "Lab_data", col_names = TRUE, trim_ws=TRUE))
+
+#report number of rows
+print(nrow(dt_wiskiLabBSD))
+
+#!! N.B. caution from Aziz:
+# sta_num_shortname added manually (not in export)
+# station number is a combo of works number and the station # shortname (latter used by lab to upload)
+# WA_result_value_unit is the correct value (do NOT use param_unit which is what gets converted by WISKI)  
+
+#reduce & normalize dataset
+#exclude Bpd (primary digestion) and Brs (raw sludge), assuming all are in Bslq*, Bsd*, Bth*
+
+dt_wiskiLabBSD<-dt_wiskiLabBSD %>%
+  filter(grepl("Bsd|Bslq|Bth", Station_no, ignore.case=T)) %>% 
+  filter(grepl("TS", Parameter_Number))%>% #ask Aziz - why is one parameter and the other Parameter_Number
+  #note this will grab TSS - but plants reporting TSS at these stations are reporting v. high, borderline max (20000mg/L) method values, suspect they may be TS - include & call out.  There's also 1 or 2 plants reporting MLSS on these stations...leave for now
+  #units are almost all mg/L, a few %
+  #assume specific gravity of water and biosolids are both equal to one (holds true only when the solids concentration in the biosolids is low), 1% TS = 10,000mg/L
+  mutate("Value_mgPerL" = case_when(
+    WQ_result_value_unit == "mg/L" ~ Result_Value,
+    WQ_result_value_unit == "%"  ~ Result_Value *10000,
+    WQ_result_value_unit == "mg/kg"  ~ Result_Value)
+    ) 
+
+```
+
+```{r}
+#medians by Station_no
+(unique(dt_wiskiLabBSD$'Station Name'))
+(dt_wiskiLabBSD$`Value mg/L`)
+
+p<-dt_wiskiLabBSD %>%
+  ggplot(aes(x=site_Name, y=Value_mgPerL)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5))+
+    labs(y = "Values (mg/L)",
+       title = "Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, 2025 Q1",
+       caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS")
+
+p
+#library(plotly)
+#ggplotly(p)
+
+```
 
