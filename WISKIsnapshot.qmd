@@ -1,0 +1,114 @@
+---
+title: "WISKIsnapshot"
+author: "Jane Ho"
+format: html
+---
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(leaflet)
+library(janitor)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(purrr)
+library(ggplot2)
+library(viridis)
+library(stringr)
+library(lubridate)
+```
+
+# Structure
+- One contiguous file with 3 years data - read & keep stitching onto a datatable, discard any older entries (can always manually re-spec to include timeframe later)
+- parse down to (start now w/) one quarter - OR does it make more sense to to land app season vs. winter (roughly semi-annual, but more delay)
+- start with highlights (manual & semi-automated text); future -- comparatives with previous year quarter
+
+## seperate endeavour
+rough mass accounting via steps in wwtp - however will likely need to be unique for each plant (maybe set up for Stratford as test)
+
+# import
+```{r}
+#grab all excel names as a character vector, assuming multiple quarterly files will be available.  may need more precision if non wiski files are stored
+
+fnames <- fs::dir_ls('data/3-Inventory/', regexp = '.xlsx') 
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_wiskiBSD <- bind_rows(lapply(fnames, read_excel, sheet = "IH_OL_data", col_names = TRUE, trim_ws=TRUE))
+
+#report number of rows
+print(nrow(dt_wiskiBSD))
+```
+
+
+# Haulage
+Amounts are variously reported under the four parameters: **HaulVol, HaulMass, HaulMassOffSite, and HauledVol** (of which HaulMass only exists in one facility, 5271), with the units either as kg, cubic meter per day, or cubic meter.  The export produces daily values, therefore all values are converted to cubic meter associated with the datestamp.
+
+```{r}
+#reduce & normalize dataset
+dt_wiskiHaul<-dt_wiskiBSD %>%
+  filter(grepl("Haul", parameter)) %>% 
+  filter(DailyValue >0 & !is.na(DailyValue)) %>% 
+  mutate(Value_m3 = case_when(
+    unit == "m³" ~ DailyValue,
+    unit == "m³/d"  ~ DailyValue,
+    unit == "kg" ~ DailyValue/1000)) %>% 
+#StationName will hint which process it came out of (but remove North, South, numericals, and Quality)
+  mutate(StationName = str_replace_all(StationName, "[:digit:]", "")) %>% 
+  mutate(StationName = str_replace_all(StationName, c("North" = "", "South" = "", "Quality"= "", "data" = ""))) %>% 
+    mutate(StationName = str_replace_all(StationName, c("  " = " "))) %>% 
+  mutate(StationName = str_trim(StationName))
+
+#prep date aggregation
+dt_wiskiHaul$month <- as.Date(cut(dt_wiskiHaul$Date,breaks = "month"))
+dt_wiskiHaul$week <-  isoweek(ymd(dt_wiskiHaul$Date))
+```
+
+keep sites - later associate w hub
+
+Daily Haulage
+provide cluster option
+```{r}
+dt_wiskiHaul %>% 
+  ggplot(aes(x= Date, y = Value_m3)) + #aes b/c will update will be based on variable
+  geom_bar(stat = 'identity', aes(fill = StationName))+
+  #geom_text(aes(label=Value_m3), vjust= -0.3, size = 3.5)+
+  theme_minimal()+
+  scale_fill_viridis(discrete = TRUE)
+
+```
+
+```{r}
+#aggregate by week - only for geom_text d/s but may be not needed
+
+dt_wiskiHaulWeekly<-
+  aggregate(Value_m3~week(Date), data = dt_wiskiHaul, sum)
+
+```
+
+```{r}
+  ggplot(data = dt_wiskiHaul, aes(x=week, y=Value_m3 )) + #aes b/c will update will be based on variable
+  geom_bar(stat = 'identity', aes(fill = StationName))+
+  #geom_text(data=dt_wiskiHaulWeekly, aes(label=Value_m3), vjust= -0.3, size = 3.5)+
+  theme_minimal()+
+  scale_fill_viridis(discrete = TRUE)+
+  scale_x_continuous(breaks=seq(0,53,1) ) +
+  labs(x = "Week Number",
+       y = "Weekly Volume (m3)",
+       title = "Haulage recorded in WISKI")+ 
+  labs(caption = "(data recorded in kg are divided by 1000 [rough conversion - majority report in cubic meters]) \n minor StationName changes: removed subpartitions & superfluous: numbers, north/south, 'data', 'quality' ")
+  #+scale_x_date(date_breaks = "1 month", date_labels = "%b")
+
+#https://forum.posit.co/t/plot-weekly-data-with-monthly-axis-labels/62631/5
+```
+
+Stats summary
+```{r}
+
+```
+
+
+
+
+Quality
+range - boxplot amongst plants
+pane or filter by process (rely on 2019 canvassing [?] unless metadata shows process changed)
+
+
