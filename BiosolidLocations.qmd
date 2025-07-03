@@ -323,15 +323,18 @@ es_long <-
 
 pos <- position_sankey(v_space = "auto", order = "descending")
 
-ggplot(es_long,
+p_fundsFlow<-ggplot(es_long,
        aes(x = stage, y = Amount, group = node,
            connector = connector, edge_id = edge_id)) +
   geom_sankeyedge(aes(fill = node), position = pos) +
-  geom_sankeynode(position = pos) +
+  geom_sankeynode(position = pos, fill = "white") +
   scale_fill_viridis_d() +
-  geom_text(aes(label = node), stat = "sankeynode", position = pos, cex = 2) 
+  geom_text(aes(label = node), stat = "sankeynode", position = pos, cex = 2, size = 15) +
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+  labs(x = " ")
 
-
+p_fundsFlow
 # dt_vendors$flowSize<- #dummy
 # dt_vendors<-select(dt_vendors, -c("GlPostingDate", "Amount")) #clean up before pivot
 # 
@@ -353,6 +356,7 @@ ggplot(es_long,
 
 #just the 2021 since 2023 and 2024 are missing PA projname
 
+ggsave(file="export/p_fundsFlow.svg", plot=p_fundsFlow, width=16, height=9)
 ```
 
 ```{r}
