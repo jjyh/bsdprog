@@ -15,6 +15,7 @@ library(ggplot2)
 library(viridis)
 library(stringr)
 library(lubridate)
+library(svglite)
 ```
 
 # Structure
@@ -84,7 +85,7 @@ dt_wiskiHaulWeekly<-
 ```
 
 ```{r}
-  ggplot(data = dt_wiskiHaul, aes(x=week, y=Value_m3 )) + #aes b/c will update will be based on variable
+p_haulage<-ggplot(data = dt_wiskiHaul, aes(x=week, y=Value_m3 )) + #aes b/c will update will be based on variable
   geom_bar(stat = 'identity', aes(fill = StationName))+
   #geom_text(data=dt_wiskiHaulWeekly, aes(label=Value_m3), vjust= -0.3, size = 3.5)+
   theme_minimal()+
@@ -95,6 +96,8 @@ dt_wiskiHaulWeekly<-
        title = "Haulage recorded in WISKI, 2025 Q1",
        caption = "(data recorded in kg are divided by 1000 [rough conversion - majority report in cubic meters]) \n minor StationName changes: removed subpartitions & superfluous: numbers, north/south, 'data', 'quality' ")
   #+scale_x_date(date_breaks = "1 month", date_labels = "%b")
+
+ggsave(file="export/p_haulage.svg", plot=p_haulage, width=16, height=9)
 
 #https://forum.posit.co/t/plot-weekly-data-with-monthly-axis-labels/62631/5
 ```
@@ -147,7 +150,7 @@ dt_wiskiLabBSD<-dt_wiskiLabBSD %>%
 (unique(dt_wiskiLabBSD$'Station Name'))
 (dt_wiskiLabBSD$`Value mg/L`)
 
-p<-dt_wiskiLabBSD %>%
+p_TS<-dt_wiskiLabBSD %>%
   ggplot(aes(x=site_Name, y=Value_mgPerL)) +
     geom_boxplot() +
     scale_fill_viridis(discrete = TRUE, alpha=0.6) +
@@ -157,9 +160,25 @@ p<-dt_wiskiLabBSD %>%
        title = "Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, 2025 Q1",
        caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS")
 
-p
-#library(plotly)
-#ggplotly(p)
+p_TS
+ggsave(file="export/p_TS.svg", plot=p_TS, width=16, height=9)
+library(plotly)
+ggplotly(p)
 
 ```
 
+# Normalization
+Use effluent ("treated water") to be consistent with HBA.  N.B. some plants won't have effluent meter & uses influent in-stead.  Run data gap check.
+
+# Frequency slicing - split by the 2 planting seasons (SBG)
+
+# Manual things
+## Mass linkage
+- e.g. Waterloo receiving from Kitchener, Preston from Galt : these may be double-counted until the lineage is sorted
+- leachate - mass email from Jisna out to RHMs
+
+facet by region - will help RHM, when looking at GP $
+facet by flow range? or population served will auto-correlate BUT population isn't going to be updated
+facet by class? - no - inaccuracies
+
+cost per hub - Witte's sheet divided by contract durations

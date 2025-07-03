@@ -13,6 +13,7 @@ library(readxl)
 library(purrr)
 library(ggplot2)
 library(viridis)
+options(scipen=10000)
 ```
 
 # Overview
@@ -282,9 +283,22 @@ dt_vendors_summ %>%
 #find proportion and maybe focus on the biggest 20?
 library(treemap)
 plot_proportionInvoice<-treemap(dt_vendors_summ, 
-        index = "DescriptionSupplierClientName", vSize = "invoicesSum", type = "index")
+        index = "DescriptionSupplierClientName", vSize = "invoicesSum", type = "index",  title = " ", fontsize.labels = c(22))
 
 #cannot ggplotly this treemap
+```
+```{r}
+library(treemapify)
+p_haulVendors<-
+  ggplot(dt_vendors_summ, aes(area = invoicesSum, fill = invoicesSum, label = DescriptionSupplierClientName)) +
+  geom_treemap() +
+  geom_treemap_text(colour = "white", place = "centre", size = 10) +
+  scale_fill_viridis_c(guide = guide_legend(keywidth = unit(1, "cm")))+ #enlarge legend
+  theme(legend.position = "bottom") +
+  labs(fill = "Sum of invoices related to biosolids/sludge, 2021")
+p_haulVendors
+
+ggsave(file="export/p_haulVendors.svg", plot=p_haulVendors, width=16, height=9)
 ```
 
 
