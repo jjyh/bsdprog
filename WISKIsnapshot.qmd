@@ -118,22 +118,6 @@ ggsave(file="export/p_haulage.svg", plot=p_haulage, width=16, height=9)
 #https://forum.posit.co/t/plot-weekly-data-with-monthly-axis-labels/62631/5
 ```
 
-Stats summary
-```{r}
-#what is my production rate? by hub
-
-dt_wiskiHaul<- left_join(dt_wiskiHaul, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit")) 
-
-dt_wiskiHaul <- dt_wiskiHaul %>% group_by(RegionList) %>% 
-  summarize(
-    HauledCumulative_m3 = round(sum(Value_m3), digits = 0)
-  )
-
-```
-
-
-
-
 Quality - try TS first
 range - boxplot amongst plants
 pane or filter by process (rely on 2019 canvassing [?] unless metadata shows process changed)
@@ -208,7 +192,7 @@ dt_wiskiEff<-dt_wiskiBSD %>%
     unit == "Ml/d"  ~ DailyValue*1000, #CLK
     unit == "l/d" ~ DailyValue/1000)) 
 
-dt_wiskiEff <- dt_wiskiEff %>% group_by(site_Name) %>% 
+dt_wiskiEff <- dt_wiskiEff %>% group_by(site_no, site_Name) %>% 
   summarize(
     EffluentCumulative_m3 = round(sum(Value_m3), digits = 0)
   )
@@ -263,7 +247,30 @@ ggsave(file="export/p_TSsplit.svg", plot=p_TSsplit, width=16, height=18)
 ```
 
 
+Stats summary
+```{r}
+#what is my production rate? by hub
+
+dt_wiskiHaul<- left_join(dt_wiskiHaul, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit")) 
+
+dt_wiskiHaul <- dt_wiskiHaul %>% group_by(RegionList) %>% 
+  summarize(
+    HauledCumulative_m3 = round(sum(Value_m3), digits = 0)
+  )
+
+dt_wiskiEff<- left_join(dt_wiskiEff, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit"))
+dt_wiskiEff <- dt_wiskiEff %>% group_by(RegionList) %>%
+  summarize(
+    EffluentCumulative_m3 = round(sum(EffluentCumulative_m3), digits = 0)
+  )
+
+dt_wiskiProd<-left_join(dt_wiskiEff, dt_wiskiHaul, by = "RegionList")
+
+```
+
 # Manual things
+Do these on embedded excel
+
 ## Mass linkage
 - e.g. Waterloo receiving from Kitchener, Preston from Galt : these may be double-counted until the lineage is sorted
 - leachate - mass email from Jisna out to RHMs

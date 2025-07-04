@@ -457,22 +457,30 @@ p_costRate
 p_costRate<-
   dt_procurement_cost %>%
     filter(cost<100) %>% #TEMPORARY remove lump sum
-    ggplot( aes(x=year, y=cost, fill=year)) +
+    ggplot(aes(x=year, y=cost)) +
       geom_boxplot() +
       scale_fill_viridis(discrete = TRUE, alpha=0.6) +
-      geom_jitter(color="black", size=0.4, alpha=0.9) #+
-      #theme_ipsum() +
-      #theme(legend.position="none", plot.title = element_text(size=11)) %>% 
+      geom_jitter(aes(color=Hub), size=0.4, alpha=0.9) +
+    labs(y = "Contracted Cost (per m3, assumed)",
+         x= "",
+       caption = "from Procurement's 'Biosolids Schedule Master 2024.xlsx', units assumed to be m3") +
+      theme_minimal() 
+#+      theme(legend.position="none", plot.title = element_text(size=11)) 
 
 ggplotly(p_costRate)
 
 library(htmlwidgets)
 
 # Save ggplotly as widget in file test.html
-saveWidget(ggplotly(p_costRate), file = "p_costRate.html")
+#https://github.com/ramnathv/htmlwidgets/issues/296
+saveWidget(as_widget(ggplotly(p_costRate)),paste0("./", "plotly_costRate"),                    selfcontained = TRUE)
+#because of above issue, the self-contained needs to be generated in base folder then manually moved, otherwise a dependent folder is generated
+
+#file = "export/p_costRate.html")
+
+ggsave(file="export/p_costRate.svg", plot=p_costRate, width=16, height=9)
+
 ```
-
-
 
 
 
