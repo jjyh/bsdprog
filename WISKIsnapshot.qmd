@@ -157,6 +157,7 @@ p_TS<-dt_wiskiLabBSD %>%
     geom_jitter(color="black", size=0.4, alpha=0.9) +
     theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5))+
     labs(y = "Values (mg/L)",
+         x= "",
        title = "Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, 2025 Q1",
        caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS")
 
@@ -169,8 +170,69 @@ ggplotly(p)
 
 # Normalization
 Use effluent ("treated water") to be consistent with HBA.  N.B. some plants won't have effluent meter & uses influent in-stead.  Run data gap check.
+```{r}
+#reduce & normalize dataset
+dt_wiskiEff<-dt_wiskiBSD %>%
+  filter(grepl("Flow", parameter)) %>% 
+  #discard all numerical as they seem to be sub meters/sub flows which get summed
+  filter(!grepl("[0-9]", parameter)) %>%
+  filter(!grepl("[0-9]", StationName)) %>%
+  filter(DailyValue >0 & !is.na(DailyValue)) %>% 
+  mutate(Value_m3 = case_when(
+    unit == "m³" ~ DailyValue,
+    unit == "m³/d"  ~ DailyValue,
+    unit == "Ml/d"  ~ DailyValue*1000, #CLK
+    unit == "l/d" ~ DailyValue/1000)) 
 
-# Frequency slicing - split by the 2 planting seasons (SBG)
+dt_wiskiEff <- dt_wiskiEff %>% group_by(site_Name) %>% 
+  summarize(
+    EffluentCumulative_m3 = round(sum(Value_m3), digits = 0)
+  )
+
+# to be added - a duplicate scrub irregardless of parameter and station
+# check Amherstburg - crazy high
+#site 5047 has Flow-1 and Flow-2 adding up to Flow
+#5302 has Flow-1, Flow1-1
+#5901 has Flow-Total_of_Zones and Flow which are the same and double counted
+#5867 has Flow and Flow: Total of All Sources which are duplicates and indistinguishable (IH Edited)
+
+# Calculate quartile boundaries
+quartiles <- quantile(dt_wiskiEff$EffluentCumulative_m3, probs = c(0, 0.25, 0.5, 0.75, 1))
+dt_wiskiEff$effQuartile <- cut(dt_wiskiEff$EffluentCumulative_m3, 
+                   breaks = quartiles, 
+                   include.lowest = TRUE, 
+                   labels = c("Q1", "Q2", "Q3", "Q4"))
+
+dt_effQuartileRanges <- data.frame(
+  Quartile = c("0-25%", "25-50%", "50-75%", "75-100%"),
+  Range = paste(head(quartiles, -1), tail(quartiles, -1), sep = " - ")
+)
+```
+
+```{r}
+dt_wiskiLabBSDEff<- left_join(dt_wiskiLabBSD, dt_wiskiEff, by = "site_Name") %>% 
+    drop_na#there's a handful of sites with bsd labs but no flows
+```
+
+
+```{r}
+# faceted by quartile of effluent 
+p_TSsplit<- dt_wiskiLabBSDEff %>% 
+  ggplot(aes(x=site_Name, y=Value_mgPerL)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5))+
+    labs(y = "Values (mg/L)",
+         x= "",
+       title = "Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, 2025 Q1",
+       caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS") +
+  #facet_grid(row = vars(effQuartile))
+  facet_wrap(~effQuartile, scales = "free_x", ncol = 1)
+
+p_TSsplit
+```
+
 
 # Manual things
 ## Mass linkage
