@@ -20,6 +20,14 @@ library(svglite)
 options(scipen = 999) 
 ```
 
+```{r}
+#create differentiated version for export
+currentIssue<-"2025T2"
+currentYear<-"2025"
+currentTrimester<- "August" #end month
+```
+
+
 # Structure
 - One contiguous file with 3 years data - read & keep stitching onto a datatable, discard any older entries (can always manually re-spec to include timeframe later)
 - parse down to (start now w/) one quarter - OR does it make more sense to to land app season vs. winter (roughly semi-annual, but more delay)
@@ -113,7 +121,7 @@ p_haulage<-ggplot(data = dt_wiskiHaul, aes(x=week, y=Value_m3 )) + #aes b/c will
        caption = "(data recorded in kg are divided by 1000 [rough conversion - majority report in cubic meters]) \n minor StationName changes: removed subpartitions & superfluous: numbers, north/south, 'data', 'quality' ")
   #+scale_x_date(date_breaks = "1 month", date_labels = "%b")
 
-ggsave(file="export/p_haulage.svg", plot=p_haulage, width=16, height=9)
+ggsave(file=paste("export/", currentIssue, "/p_haulage.svg", sep=""), plot=p_haulage, width=16, height=9)
 
 #https://forum.posit.co/t/plot-weekly-data-with-monthly-axis-labels/62631/5
 ```
@@ -154,6 +162,21 @@ dt_wiskiLabBSD<-dt_wiskiLabBSD %>%
 ```
 
 ```{r}
+#plant specific customizations
+# Paris contains liquid biosolids (bslq) and dewatered (bslq1)
+# Belleville and others also contains multiple stages
+dt_wiskiLabBSD<-dt_wiskiLabBSD %>%
+  filter(Station_no!="110001097-Bslq")%>% #Paris liquid biosolids
+  filter(Station_no!="110000016-Brs")%>% #Belleville raw
+  filter(Station_no!="110000016-Bpd")%>% #Belleville digester
+  filter(Parameter_Number!="TSulphur") %>% #Belleville sulphur gets wrapped in TS otherwise
+  filter(Station_no!="110000980-Bslq")%>% #Deseronto digester sludge (vs. 2 geotubes as bslq2 and 3)
+  filter(Station_no!="110000873-Bth") #mississipi mills cake (vs. SNDR and ATAD)
+  
+```
+
+
+```{r}
 #medians by Station_no
 (unique(dt_wiskiLabBSD$'Station Name'))
 (dt_wiskiLabBSD$`Value mg/L`)
@@ -166,13 +189,13 @@ p_TS<-dt_wiskiLabBSD %>%
     theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5))+
     labs(y = "Values (mg/L)",
          x= "",
-       title = "Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, 2025 Q1",
+       title = paste("Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, up to", currentTrimester, currentYear),
        caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS")
 
 p_TS
-ggsave(file="export/p_TS.svg", plot=p_TS, width=16, height=9)
+ggsave(file=paste("export/", currentIssue, "/p_TS.svg", sep=""), plot=p_TS, width=16, height=9)
 library(plotly)
-ggplotly(p)
+ggplotly(p_TS)
 
 ```
 
@@ -204,15 +227,19 @@ dt_wiskiEff <- dt_wiskiEff %>% group_by(site_no, site_Name) %>%
 #5901 has Flow-Total_of_Zones and Flow which are the same and double counted
 #5867 has Flow and Flow: Total of All Sources which are duplicates and indistinguishable (IH Edited)
 
+# drop where we're not reporting lab values
+dt_wiskiLabBSDEff<- left_join(dt_wiskiLabBSD, dt_wiskiEff, by = "site_Name") %>% 
+    drop_na#there's a handful of sites with bsd labs but no flows
+
 # Calculate quartile boundaries
-quartiles <- quantile(dt_wiskiEff$EffluentCumulative_m3, probs = c(0, 0.25, 0.5, 0.75, 1))
+quartiles <- quantile(dt_wiskiLabBSDEff$EffluentCumulative_m3, probs = c(0, 0.25, 0.5, 0.75, 1))
 
 dt_effQuartileRanges <- data.frame(
   Quartile = c("0-25%", "25-50%", "50-75%", "75-100%"),
-  Range = paste("facilities with", paste(paste(head(quartiles, -1), tail(quartiles, -1), sep = " - "), "m3 effluent in 2025 Q1", sep = "")), sep=""
+  Range = paste("facilities with", paste(paste(head(quartiles, -1), tail(quartiles, -1), sep = " - "), "m3 effluent up to ", currentTrimester, " ", currentYear, sep = "")), sep=""
 )
 
-dt_wiskiEff$effQuartile <- cut(dt_wiskiEff$EffluentCumulative_m3, 
+dt_wiskiLabBSDEff$effQuartile <- cut(dt_wiskiLabBSDEff$EffluentCumulative_m3, 
                    breaks = quartiles, 
                    include.lowest = TRUE, 
                    labels = dt_effQuartileRanges$Range)
@@ -220,8 +247,8 @@ dt_wiskiEff$effQuartile <- cut(dt_wiskiEff$EffluentCumulative_m3,
 ```
 
 ```{r}
-dt_wiskiLabBSDEff<- left_join(dt_wiskiLabBSD, dt_wiskiEff, by = "site_Name") %>% 
-    drop_na#there's a handful of sites with bsd labs but no flows
+# dt_wiskiLabBSDEff<- left_join(dt_wiskiLabBSD, dt_wiskiEff, by = "site_Name") %>% 
+#     drop_na#there's a handful of sites with bsd labs but no flows
 ```
 
 
@@ -235,7 +262,7 @@ p_TSsplit<- dt_wiskiLabBSDEff %>%
     theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5))+
     labs(y = "Values (mg/L)",
          x= "",
-       title = "Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, 2025 Q1",
+       title = paste("Total Solids in Biosolids (Blsq, Bth, Bsd) stations recorded in WISKI, up to", currentTrimester, currentYear),
        caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS") +
   theme(axis.text.x = element_text(angle = 45))+
   facet_wrap(~effQuartile, scales = "free_y", ncol = 1)+
@@ -243,7 +270,7 @@ p_TSsplit<- dt_wiskiLabBSDEff %>%
 
 p_TSsplit
 
-ggsave(file="export/p_TSsplit.svg", plot=p_TSsplit, width=16, height=18)
+ggsave(file=paste("export/", currentIssue, "/p_TSsplit.svg", sep=""), plot=p_TSsplit, width=16, height=9)
 ```
 
 
