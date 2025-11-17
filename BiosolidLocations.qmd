@@ -673,6 +673,50 @@ map_geo
 ```
 
 
+# Volumes
+```{r}
+dt_procurement_vol<-dt_procurement %>% select(Hub, `Current Vendor`, `Biosolids Volume`, Facility) %>% drop_na(`Biosolids Volume`)
+
+#remove Clk & high vols - distortional (but Clarkson diversional project still remains - 7k)
+dt_procurement_vol<- filter(dt_procurement_vol, Facility != "Clarkson",`Biosolids Volume`<10000)
+
+p_volLow<-dt_procurement_vol %>% 
+  ggplot(aes(`Biosolids Volume`, fill = Hub))+
+  geom_histogram()
+
+ggplotly(p_volLow)  
+```
+
+```{r}
+#filter those below 10k m3
+
+p_volLow<- dt_procurement_vol %>%
+  filter(`Biosolids Volume`<10000) %>% 
+  ggplot(aes(`Biosolids Volume`))+
+  geom_histogram()+
+  facet_grid(Hub ~.)
+
+ggplotly(p_volLow)
+
+```
+
+## Lagoons
+no depths collected in key sheet
+assume 1.5m in facultative - typical WW (but then to storage cells)
+(4m aerated and 0.45 in aerobic)
+de-sludge every 10-20 years
+maintain freeboard of 1m (max depth of 1.5m liquid for facultative)
+
+solids removed from a lagoon system can be land applied if
+the lagoon cell has not received raw sewage for three months or longer and the lagoon has been designed and operated according to MOE guidelines (OMAF, 2003)
+```{r}
+
+```
+
+
+
+Fornier, Clean Harbours and UCC Environmental (DRN Industriel Inc), Accuworx/GFL, Wessuc, JTC, Super Sucker, Engage, Spartan
+
 # Recommendations flowchart
 
 of actions With consideration of policies, regulation and historical operations handling, establish a reference "Plinko" board/
@@ -682,3 +726,5 @@ of actions With consideration of policies, regulation and historical operations 
 
 Notes from operators:
 Preston goes to Galt, which is a central receiver for the area 2025.05.26
+
+https://fcm.ca/sites/default/files/documents/resources/guide/infraguide-optimization-lagoon-operations-mamp.pdf
