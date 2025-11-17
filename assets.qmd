@@ -1,0 +1,193 @@
+---
+title: "Assets Related to Solids Train"
+author: "Jane Ho"
+format: 
+  html:
+    code-fold: true
+execute:
+  warning: false
+---
+
+
+# Readme - conceptual steps  
+
+*2025.11.12 (last data download/update)*  
+
+
+1. Download Assets table from Maximo, filtered for wastewater facilities using %WW% in location  
+2. Find relevant assets in description field - DIGESTER, DEWATER, THICKEN, CENTRIFUGE, SLUDGE TANK, SLUDGE STORAGE, BIOSOLID TANK, BIOSOLID STORAGE, LAGOON  
+3. Combine redundant terms by location (4 digit id under Location field)  
+4. Simplify location to plant name (usually the string after first comma, some cases like Sanofi are standalone)
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(leaflet)
+library(janitor)
+library(tidyr)
+library(dplyr)
+library(readxl)
+library(purrr)
+library(ggplot2)
+library(viridis)
+library(stringr)
+library(lubridate)
+library(svglite)
+library(fuzzyjoin)
+library(forcats)
+library(DT)
+library(gt)
+options(scipen = 999) 
+
+# Capture the code run date/time
+code_run_date <- Sys.Date()
+code_run_time <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+```
+
+# Import
+```{r}
+#grab all excel names as a character vector, assuming multiple quarterly files will be available.  may need more precision if non wiski files are stored
+
+# the data file is queried with only "%WW%" to limit to ww assets 
+fnames <- fs::dir_ls('data/2-Facilities/', regexp = 'maximoWWassets.xlsx')
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_maximoAssets <- bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE))
+
+#there are two fields named Description - change
+dt_maximoAssets<- dt_maximoAssets %>% 
+  rename(asset_description = 2, loc_description = 4) %>% #asset description 
+  select(-Site, -Parent) %>% # no info in these
+  janitor::clean_names() %>% #asset description 
+
+#report number of rows
+print(nrow(dt_maximoAssets))
+```
+
+
+```{r}
+#reduce & normalize dataset
+
+#set search strings
+keywords<- c("DIGESTER", "DEWATER", "THICKEN", "CENTRIFUGE", "SLUDGE TANK", "SLUDGE STORAGE", "BIOSOLID TANK", "BIOSOLID STORAGE", "LAGOON")
+
+combined_keywords <- paste(keywords, collapse = "|")
+
+dt_maximoAssets_wwSolids<-dt_maximoAssets %>%
+  # find solids train related
+  filter(grepl(combined_keywords, asset_description)) %>%
+  # include any operating, inactive, not in contract or not ready
+  filter(!grepl("DECOMMISSIONED", status)) %>% 
+  # get location code and human readable loc
+  mutate(loc_code = substr(location, start = 1, stop = 4))%>%
+  mutate(
+    # Split into 3 columns: Before first comma, Between 1st and 2nd, After 2nd/Last
+    parts = str_split_fixed(loc_description, pattern = ",", n = 3),
+    # The middle part is readable plant name; if no comma, use the whole string
+    loc_name = if_else(
+      grepl(",", loc_description),
+      str_trim(parts[, 2]),
+      str_trim(loc_description)
+    )
+  )%>%
+  select(-parts) # Clean up temporary columns
+
+  # Extract the first occurrence of any matched keyword for each row
+dt_maximoAssets_wwSolids<-dt_maximoAssets_wwSolids %>%
+  mutate(matched_keyword = str_extract(asset_description, combined_keywords)) %>%
+  # Keep only the first instance of each matched_keyword at each loc_description
+  group_by(loc_name, matched_keyword) %>%
+  slice(1) %>%
+  ungroup()
+```
+
+# test for NAs in locations
+```{r}
+# Test for NAs in loc_code and loc_name
+cat("NAs in loc_code:", sum(is.na(dt_maximoAssets_wwSolids$loc_code)), "\n")
+cat("NAs in loc_name:", sum(is.na(dt_maximoAssets_wwSolids$loc_name)), "\n")
+cat("Total rows:", nrow(dt_maximoAssets_wwSolids), "\n")
+
+# Show any rows with NAs
+if (any(is.na(dt_maximoAssets_wwSolids$loc_code)) || any(is.na(dt_maximoAssets_wwSolids$loc_name))) {
+  cat("\nRows with NAs:\n")
+  print(dt_maximoAssets_wwSolids %>% filter(is.na(loc_code) | is.na(loc_name)) %>% select(location, loc_description, loc_code, loc_name))
+}
+```
+
+# Tabulate loc_codes by matched_keyword
+```{r}
+# Count unique loc_codes for each matched_keyword
+dt_equipment_count <- dt_maximoAssets_wwSolids %>%
+  filter(!is.na(matched_keyword)) %>%
+  group_by(matched_keyword) %>%
+  summarise(
+    equippedWWTPs = n_distinct(loc_code), .groups = 'drop') %>%
+  arrange(desc(equippedWWTPs))
+
+dt_equipment_count %>%
+  gt() %>%
+  cols_label(
+    matched_keyword = "Equipment Type",
+    equippedWWTPs = "Number of WWTPs"
+  ) %>%
+  tab_header(
+    title = "Solids-Related Equipment Counts",
+    subtitle = paste("Data as of:", format(code_run_date, "%B %d, %Y"))
+  ) %>%
+  opt_stylize(style = 6, color = "blue")
+```
+
+```{r fig.width=12, fig.height=24}
+#heatmap showing which keywords are present in each location
+
+dt_maximoAssets_wwSolids<- dt_maximoAssets_wwSolids %>% mutate(loc_name = fct_reorder(loc_name, desc(loc_name)))
+
+p_maximoAssets_wwSolids<-
+  dt_maximoAssets_wwSolids %>%
+    group_by(loc_name, matched_keyword) %>%
+    summarise(count = n(), .groups = 'drop') %>%
+    ggplot(aes(x = matched_keyword, y = reorder(loc_name, loc_name, decreasing = TRUE), fill = count)) +
+    geom_tile(color = "white", linewidth = 0.5) +
+    scale_fill_viridis_c(option = "cividis", direction = -1) +
+    theme_minimal() +
+    labs(
+      title = "Solids-Related Asset in WWTPs (Maximo )",
+      x = "Equipment Type",
+      y = "Location",
+      fill = "Count",
+      caption = paste("Code run on:", format(code_run_date, "%B %d, %Y"), "at", code_run_time)
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.caption = element_text(size = 9, hjust = 0, face = "italic"),
+      legend.position = "none"
+    )
+
+p_maximoAssets_wwSolids
+```
+
+# Filterable Table
+Add dropdown for solids assets (limitation)
+
+
+```{r}
+# Create a filterable table with key columns
+dt_maximoAssets_wwSolids %>%
+  select(loc_code, loc_name, matched_keyword) %>%
+  arrange(loc_name, matched_keyword) %>%
+  datatable(
+    filter = 'top',
+    options = list(
+      pageLength = 15,
+      autoWidth = TRUE,
+      columnDefs = list(
+        list(width = '100px', targets = c(0, 2)),
+        list(width = '150px', targets = 1)
+      )
+    ),
+    colnames = c('Maximo Location Code', 'Location Name', 'Solids Train Key Asset'),
+    caption = htmltools::tags$caption(
+      style = 'caption-side: bottom; text-align: left;',
+      paste("Click on column headers to sort; use search boxes to filter | Data as of:", format(code_run_date, "%B %d, %Y"))
+    )
+  )
+```
