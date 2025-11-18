@@ -1,8 +1,9 @@
 ---
 title: "Assets Related to Solids Train"
 author: "Jane Ho"
-format: 
+format:
   html:
+    embed-resources: true
     code-fold: true
 execute:
   warning: false
@@ -35,6 +36,7 @@ library(fuzzyjoin)
 library(forcats)
 library(DT)
 library(gt)
+library(tidygeocoder)
 options(scipen = 999) 
 
 # Capture the code run date/time
@@ -49,15 +51,28 @@ code_run_time <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
 # the data file is queried with only "%WW%" to limit to ww assets 
 fnames <- fs::dir_ls('data/2-Facilities/', regexp = 'maximoWWassets.xlsx')
 fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
-dt_maximoAssets <- bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE))
+dt_maximoAssets <- suppressMessages(suppressWarnings(
+  bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE))
+))
+
+#plant addresses
+fnames <- fs::dir_ls('data/2-Facilities/', regexp = 'maximoLocation.xlsx')
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_maximoLocation <- suppressMessages(suppressWarnings(
+  bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE))
+))
+
 
 #there are two fields named Description - change
-dt_maximoAssets<- dt_maximoAssets %>% 
-  rename(asset_description = 2, loc_description = 4) %>% #asset description 
-  select(-Site, -Parent) %>% # no info in these
-  janitor::clean_names() %>% #asset description 
+dt_maximoAssets<- suppressMessages(suppressWarnings(
+  dt_maximoAssets %>% 
+    rename(asset_description = 2, loc_description = 4) %>% #asset description 
+    select(-Site, -Parent) %>% # no info in these
+    janitor::clean_names() #asset description 
+))
 
 #report number of rows
+cat("\nEntries downloaded from Maximo:\n")
 print(nrow(dt_maximoAssets))
 ```
 
@@ -98,7 +113,31 @@ dt_maximoAssets_wwSolids<-dt_maximoAssets_wwSolids %>%
   ungroup()
 ```
 
-# test for NAs in locations
+
+```{r}
+# Normalize column names and attempt to parse addresses into lat/lon
+dt_maximoLocation <- dt_maximoLocation %>% janitor::clean_names()
+
+# Normalize common state/province abbreviations (ON -> Ontario)
+dt_maximoLocation <- dt_maximoLocation %>%
+  mutate(state_province = ifelse(
+    !is.na(state_province) & str_to_upper(str_squish(state_province)) == "ON",
+    "Ontario",
+    state_province
+  )) %>%
+  mutate(country = "Canada")
+
+# Drop rows where state_province is missing; some have street addresses but need extra grease to break
+dt_maximoLocation <- dt_maximoLocation %>%
+  filter(!is.na(state_province))
+
+#Passing addresses to the Nominatim single address geocoder, https://jessecambon.github.io/tidygeocoder/articles/tidygeocoder.html
+dt_maximoGeoLocation <- dt_maximoLocation %>%  geocode(street = street_address, city = city, state = state_province, country = country, method = "osm")
+
+write.csv(dt_maximoGeoLocation, "dt_maximoGeolocation.csv", row.names = FALSE)
+
+```
+
 ```{r}
 # Test for NAs in loc_code and loc_name
 cat("NAs in loc_code:", sum(is.na(dt_maximoAssets_wwSolids$loc_code)), "\n")
@@ -166,11 +205,31 @@ p_maximoAssets_wwSolids
 ```
 
 # Filterable Table
-Add dropdown for solids assets (limitation)
+*(interactivity - filter, sort, search are all broken once loaded to sharepoint - use ctrl+f in lieu...)*
 
-
-```{r}
-# Create a filterable table with key columns
+```{r, eval = TRUE}
+  # Create a gt version of the same table - doesn't work on sharepoint (bc of interactivity?)
+  dt_maximoAssets_wwSolids %>%
+    select(loc_code, loc_name, matched_keyword) %>%
+    arrange(loc_name, matched_keyword) %>%
+    mutate(loc_code = as.character(loc_code)) %>%
+    gt() %>%
+    cols_label(
+      loc_code = 'Maximo Location Code',
+      loc_name = 'Location Name',
+      matched_keyword = 'Solids Train Key Asset'
+    ) %>%
+    cols_align(align = "left", columns = everything()) %>%
+    tab_header(
+      title = 'Solids Assets (by Location)'
+    ) %>%
+    # put the data-run date in a footnote/source note
+    tab_source_note(md(paste('Data as of:', format(code_run_date, '%B %d, %Y')))) %>%
+    fmt_missing(columns = everything(), missing_text = '-') %>%
+    tab_options(table.font.names = 'Arial', heading.align = 'left')
+```
+```{r, eval = FALSE}
+# Create a filterable table with key columns - DT does not work at in Sharepoint
 dt_maximoAssets_wwSolids %>%
   select(loc_code, loc_name, matched_keyword) %>%
   arrange(loc_name, matched_keyword) %>%
@@ -191,3 +250,27 @@ dt_maximoAssets_wwSolids %>%
     )
   )
 ```
+  ```{r, eval = FALSE}
+  # Create a gt version of the same table - doesn't work on sharepoint (bc of interactivity?)
+  dt_maximoAssets_wwSolids %>%
+    select(loc_code, loc_name, matched_keyword) %>%
+    arrange(loc_name, matched_keyword) %>%
+    mutate(loc_code = as.character(loc_code)) %>%
+    gt() %>%
+    cols_label(
+      loc_code = 'Maximo Location Code',
+      loc_name = 'Location Name',
+      matched_keyword = 'Solids Train Key Asset'
+    ) %>%
+    cols_align(align = "left", columns = everything()) %>%
+    tab_header(
+      title = 'Solids Assets (by Location)'
+    ) %>%
+    # enable interactive features (sorting/searching) for all columns
+    opt_interactive() %>%
+    # put the data-run date in a footnote/source note
+    tab_source_note(md(paste('Data as of:', format(code_run_date, '%B %d, %Y')))) %>%
+    fmt_missing(columns = everything(), missing_text = '-') %>%
+    tab_options(table.font.names = 'Arial', heading.align = 'left')
+  ```
+
