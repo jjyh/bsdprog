@@ -130,8 +130,8 @@ dt_maximoLocation <- dt_maximoLocation %>%
     state_province))  %>%
   mutate(country = "Canada")
 
-# Drop rows where state_province is missing; some have street addresses but need extra grease to break
-dt_maximoLocation <- dt_maximoLocation %>%
+# Create new table for geocoding, Drop rows where state_province is missing; some have street addresses but need extra grease to break
+dt_maximoGeoLocation <- dt_maximoLocation %>%
   filter(!is.na(state_province))
 
 # street addresses have artefacts to be removed, then remove the leftover comma / whitepace
@@ -147,7 +147,9 @@ dt_maximoGeoLocation$street_address <- sub(",\\sDelhi$", "", dt_maximoGeoLocatio
 dt_maximoGeoLocation$street_address <- sub(",\\sAmherstburg$", "", dt_maximoGeoLocation$street_address)
 
 #Passing addresses to the Nominatim single address geocoder, https://jessecambon.github.io/tidygeocoder/articles/tidygeocoder.html
-dt_maximoGeoLocation <- dt_maximoLocation %>%  geocode(street = street_address, city = city, state = state_province, country = country, method = "osm")
+dt_maximoGeoLocation <- dt_maximoGeoLocation %>%  geocode(street = street_address, city = city, state = state_province, country = country, method = "osm")
+
+# add a sieve for NAs to look just at town state country TBD
 
 write.csv(dt_maximoGeoLocation, "dt_maximoGeolocation.csv", row.names = FALSE)
 ```
@@ -264,29 +266,29 @@ dt_maximoAssets_wwSolids %>%
     )
   )
 ```
-  ```{r, eval = FALSE}
-  # Create a gt version of the same table - doesn't work on sharepoint (bc of interactivity?)
-  dt_maximoAssets_wwSolids %>%
-    select(loc_code, loc_name, matched_keyword) %>%
-    arrange(loc_name, matched_keyword) %>%
-    mutate(loc_code = as.character(loc_code)) %>%
-    gt() %>%
-    cols_label(
-      loc_code = 'Maximo Location Code',
-      loc_name = 'Location Name',
-      matched_keyword = 'Solids Train Key Asset'
-    ) %>%
-    cols_align(align = "left", columns = everything()) %>%
-    tab_header(
-      title = 'Solids Assets (by Location)'
-    ) %>%
-    # enable interactive features (sorting/searching) for all columns
-    opt_interactive() %>%
-    # put the data-run date in a footnote/source note
-    tab_source_note(md(paste('Data as of:', format(code_run_date, '%B %d, %Y')))) %>%
-    fmt_missing(columns = everything(), missing_text = '-') %>%
-    tab_options(table.font.names = 'Arial', heading.align = 'left')
-  ```
+```{r, eval = FALSE}
+# Create a gt version of the same table - doesn't work on sharepoint (bc of interactivity?)
+dt_maximoAssets_wwSolids %>%
+  select(loc_code, loc_name, matched_keyword) %>%
+  arrange(loc_name, matched_keyword) %>%
+  mutate(loc_code = as.character(loc_code)) %>%
+  gt() %>%
+  cols_label(
+    loc_code = 'Maximo Location Code',
+    loc_name = 'Location Name',
+    matched_keyword = 'Solids Train Key Asset'
+  ) %>%
+  cols_align(align = "left", columns = everything()) %>%
+  tab_header(
+    title = 'Solids Assets (by Location)'
+  ) %>%
+  # enable interactive features (sorting/searching) for all columns
+  opt_interactive() %>%
+  # put the data-run date in a footnote/source note
+  tab_source_note(md(paste('Data as of:', format(code_run_date, '%B %d, %Y')))) %>%
+  fmt_missing(columns = everything(), missing_text = '-') %>%
+  tab_options(table.font.names = 'Arial', heading.align = 'left')
+```
 
 ```{r}
 # export as a table with all needed fields to create nested json for leaflet (cannot use r generated leaflet map in sharepoint)
@@ -294,7 +296,7 @@ dt_maximoAssets_wwSolids %>%
 # Extract the first 4 loc characters for joining
 dt_maximoGeoLocation <- dt_maximoGeoLocation %>%
   mutate(loc_code = substr(address_code, 1, 4))
-dt_maximoAssets_wwSolidsLoc$SLUDGE STORAGE <- 
+  
 # pivot wide with boolean of each equipment field then the name, loc code 
 dt_maximoAssets_wwSolidsLoc <- dt_maximoAssets_wwSolids %>%
   mutate(present = 1) %>% #placeholder to allow pivot boolean
@@ -302,14 +304,33 @@ dt_maximoAssets_wwSolidsLoc <- dt_maximoAssets_wwSolids %>%
   group_by(loc_code, loc_name)%>%
   summarise(DIGESTER = sum(DIGESTER), DEWATER = sum(DEWATER), THICKEN = sum(THICKEN), CENTRIFUGE = sum(CENTRIFUGE), `SLUDGE STORAGE` = sum(`SLUDGE STORAGE`), `SLUDGE TANK` = sum(`SLUDGE TANK`), LAGOON = sum(LAGOON))
 
-# join by loc code to address_code first four digits (might be wrong - cluster instead of facility)
+# join by loc code to address_code first four digits (might be wrong - cluster instead of facility).  
+#dt_maximoGeoLocation had 281 rows; dt_maximoAssets_wwSolidsLoc had 103
 dt_maximoAssets_wwSolidsLoc <-dt_maximoAssets_wwSolidsLoc %>%
 inner_join(dt_maximoGeoLocation, by = "loc_code")
 
 #N.B. problems - now forced squish by loc_code only
 # Row 29 of `x` matches multiple rows in `y`.
-# 5524-WWCA (Callander WWWTL) to 5524 (Callander Lagoon)
+# 5524-WWCA (Callander WWWTL) to 5524 (Callander Lagoon) 
+# 5613 Southampton is misattributed - 5313 WWSH vs 5313 SPP1 (WWSH doesn't exist)
 
+# Convert each row to JSON-like format
+#json_AssetsGeoLoc <- apply(dt_maximoAssets_wwSolidsLoc, 1, function(row) {
+#  paste0("[", paste(sprintf('"%s"', row), collapse = ", "), "]")
+#})
 
+# Convert each row to JSON-like format, replacing NA with null
+json_AssetsGeoLoc <- apply(filter(dt_maximoAssets_wwSolidsLoc, !is.na(lat)), 1, function(row) {
+  # Replace NA with null
+  row <- ifelse(is.na(row), "null", sprintf('"%s"', row))
+  paste0("[", paste(row, collapse = ", "), "]")
+})
 
+# Combine rows into a JSON array
+json_AssetsGeoLoc <- paste0("[", paste(json_AssetsGeoLoc, collapse = ", "), "]")
+
+# Write to file for checking
+writeLines(json_AssetsGeoLoc, "array_output.json")
+#17 and 18 are the lat and lon (javascript counting form 0)
 ```
+
