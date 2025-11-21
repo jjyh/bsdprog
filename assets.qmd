@@ -115,7 +115,6 @@ dt_maximoAssets_wwSolids<-dt_maximoAssets_wwSolids %>%
 ```{r}
 # Normalize column names and attempt to parse addresses into lat/lon
 dt_maximoLocation <- dt_maximoLocation %>% janitor::clean_names()
-
 # Normalize common state/province abbreviations (missing or ON -> Ontario, QC -> Quebec)
 #there's also a consultant in MB?
 dt_maximoLocation <- dt_maximoLocation %>%
@@ -137,7 +136,7 @@ dt_maximoGeoLocation <- dt_maximoLocation %>%
 # street addresses have artefacts to be removed, then remove the leftover comma / whitepace
 dt_maximoGeoLocation$street_address<- gsub("ON.*","", 
   gsub("PO.*","", 
-  gsub("Suite.*","",dt_maximoLocation$street_address)))
+  gsub("Suite.*","",dt_maximoGeoLocation$street_address)))
 dt_maximoGeoLocation$street_address <- sub(",\\s*$", "", dt_maximoGeoLocation$street_address)
 dt_maximoGeoLocation$street_address<-trimws(dt_maximoGeoLocation$street_address)
 
@@ -147,9 +146,13 @@ dt_maximoGeoLocation$street_address <- sub(",\\sDelhi$", "", dt_maximoGeoLocatio
 dt_maximoGeoLocation$street_address <- sub(",\\sAmherstburg$", "", dt_maximoGeoLocation$street_address)
 
 #Passing addresses to the Nominatim single address geocoder, https://jessecambon.github.io/tidygeocoder/articles/tidygeocoder.html
-dt_maximoGeoLocation <- dt_maximoGeoLocation %>%  geocode(street = street_address, city = city, state = state_province, country = country, method = "osm")
+#Only unique input data (either addresses or coordinates) is passed to geocoding services even if your data contains duplicates. NA and blank inputs are excluded from queries. Input latitudes and longitudes are also limited to the range of possible values.
+dt_maximoGeoLocation <- dt_maximoGeoLocation %>%  geocode(street = street_address, city = city, state = state_province, country = country, method = "osm") #, verbose = TRUE # doesn't tell you which failed though
 
-# add a sieve for NAs to look just at town state country TBD
+# add a failure catch  for NAs to look just at town state country - total capture now 267 out of 281 instead of 158
+dt_maximoGeoLocation_townOnly <- dt_maximoGeoLocation[is.na(dt_maximoGeoLocation$lat),] %>% select(-lat, -long)  %>% geocode(city = city, state = state_province, country = country, method = "osm")
+
+dt_maximoGeoLocation<-rbind(dt_maximoGeoLocation[!is.na(dt_maximoGeoLocation$lat),], dt_maximoGeoLocation_townOnly)
 
 write.csv(dt_maximoGeoLocation, "dt_maximoGeolocation.csv", row.names = FALSE)
 ```
