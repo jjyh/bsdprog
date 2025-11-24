@@ -335,5 +335,38 @@ json_AssetsGeoLoc <- paste0("[", paste(json_AssetsGeoLoc, collapse = ", "), "]")
 # Write to file for checking
 writeLines(json_AssetsGeoLoc, "array_output.json")
 #17 and 18 are the lat and lon (javascript counting form 0)
+
+#this json is then manually copy & pasted into the embed snippet inside https://ocwa0.sharepoint.com/sites/OBRR/SitePages/maximoSolidsTrainAssets.aspx?Mode=Edit
 ```
 
+```{r}
+#convert json to  geojson 
+#https://gis.stackexchange.com/questions/73756/is-it-possible-to-convert-regular-json-to-geojson
+
+#adding layers using geojson data to leaflet
+#https://courses.ems.psu.edu/geog585/node/769
+
+## Install packages if not already installed
+# install.packages("geojsonio")
+
+library(geojsonio)
+# The geojson_write function handles the conversion and file output
+geojson_write(
+  df,
+  lat = "latitude",
+  lon = "longitude",
+  file = "your_output_file.geojson"
+)
+
+#then in the leaflet js 
+#take the content of the converted file:
+#var geoJsonPoints = [{
+#"type": "FeatureCollection",
+#"features": [
+#{ "type": "Feature", "properties": { "name": "LocationA", "latitude": 34.0522, "longitude": -118.2437 }, "geometry": { "type": "Point", "coordinates": [ -118.2437, 34.0522 ] } },
+#{ "type": "Feature", "properties": { "name": "LocationB", "latitude": 36.1628, "longitude": -115.1372 }, "geometry": { "type": "Point", "coordinates": [ -115.1372, 36.1628 ] } }
+#]
+#}];
+#L.geoJSON(geojsonFeature).addTo(map);
+
+#tested successfully here - https://ocwa0.sharepoint.com/sites/OBRR/SitePages/test-map.aspx?Mode=Edit
