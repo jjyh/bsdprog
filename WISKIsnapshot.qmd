@@ -339,6 +339,40 @@ p_wiskiHaulPlant
 ggsave(file=paste("export/", currentIssue, "/p_haulageByPlant.svg", sep=""), plot=p_wiskiHaulPlant, width=16, height=16)
 ```
 
+```{r}
+#dry tonnage
+dt_wiskiLabBSD %>% group_by(site_Name) %>% 
+  summarize(
+    medianTS_mgPerL = median(Value_mgPerL)
+  )
+
+dt_wiskiHaulPlant<- left_join(dt_wiskiHaulPlant, 
+                              dt_wiskiLabBSD[,c(1,2,12)]%>% 
+                                group_by(site_Name) %>% 
+                                summarize(medianTS_mgPerL = median(Value_mgPerL)), 
+                              by = c("site_Name")) 
+
+dt_wiskiHaulPlant$dryTonnage<-round(dt_wiskiHaulPlant$medianTS_mgPerL * dt_wiskiHaulPlant$HauledCumulative_m3/1000000, 2) 
+
+p_wiskiHaulPlantDry<-dt_wiskiHaulPlant %>%
+  ggplot(aes(x=site_Name, y=dryTonnage)) +
+    geom_bar(stat = 'identity', aes(fill = RegionList))+
+    geom_text(data=dt_wiskiHaulPlant, aes(label=dryTonnage), vjust= -0.3, size = 3.5)+
+    theme_minimal()+
+    scale_fill_viridis(discrete = TRUE)+
+    geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5), legend.position = "top", legend.title = element_blank())+
+    labs(y = "Hauled Dry Tonnage Estimate (t)",
+         x= "",
+       title = paste("Dry tonnage estimated by Total Hauled volume and median biosolids TS, recorded in WISKI,", currentStart, "to", currentTrimester),
+       caption = "South Peel quantities not available from WISKI")+
+   coord_flip()+scale_x_discrete(limits = rev)
+
+p_wiskiHaulPlantDry
+
+ggsave(file=paste("export/", currentIssue, "/p_haulageByPlantDry.svg", sep=""), plot=p_wiskiHaulPlantDry, width=16, height=16)
+```
+
 
 # Manual things
 Do these on embedded excel
