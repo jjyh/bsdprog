@@ -178,6 +178,17 @@ Data Notes
 
 maps
 
+
+```{r}
+#plant addresses from Angela (PC/OPs db?) at \\ocwfilecorp\everyone\VP_OPS\Ops-Analyst\Facilities
+fnames <- fs::dir_ls('data/2-Facilities/', regexp = 'Master-List of Locations.')
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_opLocation <- suppressMessages(suppressWarnings(
+  bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE))
+))
+
+```
+
 # Risks & opportunities registry
 
 (capacity or quality hotspots) (landfill/cost abnormalities)

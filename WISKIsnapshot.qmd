@@ -16,15 +16,16 @@ library(viridis)
 library(stringr)
 library(lubridate)
 library(svglite)
+library(plotly)
 
 options(scipen = 999) 
 ```
 
 ```{r}
 #create differentiated version for export
-currentIssue<-"2025T2"
+currentIssue<-"2025T3"
 currentYear<-"2025"
-currentTrimester<- "August" #end month
+currentTrimester<- "December" #end month
 ```
 
 
@@ -46,8 +47,6 @@ dt_wiskiMeta <- bind_rows(lapply(fnames, read_excel, sheet = "Wastewater", col_n
 
 #report number of rows
 print(nrow(dt_wiskiMeta))
-
-
 ```
 
 
@@ -56,7 +55,11 @@ print(nrow(dt_wiskiMeta))
 
 fnames <- fs::dir_ls('data/3-Inventory/', regexp = '.xlsx')
 fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+
 dt_wiskiBSD <- bind_rows(lapply(fnames, read_excel, sheet = "IH_OL_data", col_names = TRUE, trim_ws=TRUE, col_types = c("text", "guess", "guess",  "guess", "guess", "guess", "guess", "guess", "guess", "guess", "guess"))) #have to spec first site_no as text otherwise it'll guess for numbers and create NAs.  fragile for other columns since Aziz adds manually
+
+#the tab names are inconsistent - seems an artefact of human db download - must manually correct to match IH_OL_data and Lab_data
+#last column has Aziz (does not always) add manually using excel formula ( to sta_num_shortname) !!
 
 #report number of rows
 print(nrow(dt_wiskiBSD))
@@ -91,14 +94,21 @@ keep sites - later associate w hub
 Daily Haulage
 provide cluster option
 ```{r}
-dt_wiskiHaul %>% 
+p_haulageByPlant<-dt_wiskiHaul %>% 
   ggplot(aes(x= Date, y = Value_m3)) + #aes b/c will update will be based on variable
-  geom_bar(stat = 'identity', aes(fill = StationName))+
+  geom_bar(stat = 'identity', aes(fill = site_Name))+
   #geom_text(aes(label=Value_m3), vjust= -0.3, size = 3.5)+
   theme_minimal()+
-  scale_fill_viridis(discrete = TRUE)
+  scale_fill_viridis(discrete = TRUE)  
 
+ggplotly(p_haulageByPlant)
+
+#try export to html ()
+library(htmlwidgets)
+saveWidget(ggplotly(p_haulageByPlant), file=paste("export/", currentIssue, "/p_haulageByPlant.html", sep=""))
+#generating div - to try https://stackoverflow.com/questions/36262748/save-plotly-plot-to-local-file-and-insert-into-html
 ```
+
 
 ```{r}
 #aggregate by week - only for geom_text d/s but may be not needed
@@ -175,7 +185,6 @@ dt_wiskiLabBSD<-dt_wiskiLabBSD %>%
   
 ```
 
-
 ```{r}
 #medians by Station_no
 (unique(dt_wiskiLabBSD$'Station Name'))
@@ -193,10 +202,10 @@ p_TS<-dt_wiskiLabBSD %>%
        caption = "(data recorded in % and mg/kg are divided by 10000, taken on par, respectively, assuming water density  \n Rockland and Espanola record MLSS at biosolids stations and are excluded \n Plants recording TSS on biosolids are assumed to be equiv. to TS")
 
 p_TS
-ggsave(file=paste("export/", currentIssue, "/p_TS.svg", sep=""), plot=p_TS, width=16, height=9)
-library(plotly)
-ggplotly(p_TS)
 
+ggsave(file=paste("export/", currentIssue, "/p_TS.svg", sep=""), plot=p_TS, width=16, height=9)
+
+ggplotly(p_TS)
 ```
 
 # Normalization
@@ -204,8 +213,9 @@ Use effluent ("treated water") to be consistent with HBA.  N.B. some plants won'
 ```{r}
 #reduce & normalize dataset
 dt_wiskiEff<-dt_wiskiBSD %>%
-  filter(grepl("Flow", parameter)) %>% 
-  #discard all numerical as they seem to be sub meters/sub flows which get summed
+  filter(grepl("Flow", parameter))%>% 
+  filter(grepl("Eff", StationName))%>%  #gets rid of centrifuge, polymer (Amherstburg)
+  #discard all numerical as they seem to be sub meters/sub flows which get summed (will inadvertently drop places which do not combine)
   filter(!grepl("[0-9]", parameter)) %>%
   filter(!grepl("[0-9]", StationName)) %>%
   filter(DailyValue >0 & !is.na(DailyValue)) %>% 
@@ -221,9 +231,8 @@ dt_wiskiEff <- dt_wiskiEff %>% group_by(site_no, site_Name) %>%
   )
 
 # to be added - a duplicate scrub irregardless of parameter and station
-# check Amherstburg - crazy high
 #site 5047 has Flow-1 and Flow-2 adding up to Flow
-#5302 has Flow-1, Flow1-1
+#5302 has Flow-1, Flow1-1 and Combined Flow (Flow1+Flow2+Flow3) - combined gets scrubbed b/c of number
 #5901 has Flow-Total_of_Zones and Flow which are the same and double counted
 #5867 has Flow and Flow: Total of All Sources which are duplicates and indistinguishable (IH Edited)
 
@@ -278,21 +287,22 @@ Stats summary
 ```{r}
 #what is my production rate? by hub
 
-dt_wiskiHaul<- left_join(dt_wiskiHaul, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit")) 
+dt_wiskiHaulRegion<- left_join(dt_wiskiHaul, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit")) 
 
-dt_wiskiHaul <- dt_wiskiHaul %>% group_by(RegionList) %>% 
+dt_wiskiHaulRegion <- dt_wiskiHaulRegion %>% group_by(RegionList) %>% #group_by(site_no) to find largest haulers 
   summarize(
     HauledCumulative_m3 = round(sum(Value_m3), digits = 0)
   )
 
-dt_wiskiEff<- left_join(dt_wiskiEff, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit"))
-dt_wiskiEff <- dt_wiskiEff %>% group_by(RegionList) %>%
+dt_wiskiEffRegion<- left_join(dt_wiskiEff, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit"))
+dt_wiskiEffRegion <- dt_wiskiEffRegion %>% group_by(RegionList) %>%
   summarize(
     EffluentCumulative_m3 = round(sum(EffluentCumulative_m3), digits = 0)
   )
 
-dt_wiskiProd<-left_join(dt_wiskiEff, dt_wiskiHaul, by = "RegionList")
+dt_wiskiProdByRegion<-left_join(dt_wiskiEffRegion, dt_wiskiHaulRegion, by = "RegionList")
 
+dt_wiskiProdByRegion$Yield_kgBiosolidPerm3Effluent<-dt_wiskiProdByRegion$HauledCumulative_m3/dt_wiskiProdByRegion$EffluentCumulative_m3*1000
 ```
 
 # Manual things
