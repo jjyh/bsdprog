@@ -23,9 +23,10 @@ options(scipen = 999)
 
 ```{r}
 #create differentiated version for export
+currentStart<- "2025 January"
 currentIssue<-"2025T3"
 currentYear<-"2025"
-currentTrimester<- "December" #end month
+currentTrimester<- "November 30" #end month
 ```
 
 
@@ -94,12 +95,15 @@ keep sites - later associate w hub
 Daily Haulage
 provide cluster option
 ```{r}
+
+library(scales)
 p_haulageByPlant<-dt_wiskiHaul %>% 
   ggplot(aes(x= Date, y = Value_m3)) + #aes b/c will update will be based on variable
   geom_bar(stat = 'identity', aes(fill = site_Name))+
   #geom_text(aes(label=Value_m3), vjust= -0.3, size = 3.5)+
   theme_minimal()+
-  scale_fill_viridis(discrete = TRUE)  
+  scale_fill_viridis(discrete = TRUE)+
+  scale_x_datetime(date_breaks = "1 month", labels = date_format("%b"))
 
 ggplotly(p_haulageByPlant)
 
@@ -304,6 +308,37 @@ dt_wiskiProdByRegion<-left_join(dt_wiskiEffRegion, dt_wiskiHaulRegion, by = "Reg
 
 dt_wiskiProdByRegion$Yield_kgBiosolidPerm3Effluent<-dt_wiskiProdByRegion$HauledCumulative_m3/dt_wiskiProdByRegion$EffluentCumulative_m3*1000
 ```
+
+
+```{r}
+#find top and least producing plant; dropdown -Peel does not report haulage volumes
+
+dt_wiskiHaulPlant<- left_join(dt_wiskiHaul, dt_wiskiMeta[,c(1:17)], by = c("site_no" = "orgUnit")) 
+
+dt_wiskiHaulPlant <- dt_wiskiHaulPlant %>% group_by(site_Name, RegionList) %>% #group_by(site_no) to find largest haulers 
+  summarize(
+    HauledCumulative_m3 = round(sum(Value_m3), digits = 0),
+  )
+
+p_wiskiHaulPlant<-dt_wiskiHaulPlant %>%
+  ggplot(aes(x=site_Name, y=HauledCumulative_m3)) +
+    geom_bar(stat = 'identity', aes(fill = RegionList))+
+    geom_text(data=dt_wiskiHaulPlant, aes(label=HauledCumulative_m3), vjust= -0.3, size = 3.5)+
+    theme_minimal()+
+    scale_fill_viridis(discrete = TRUE)+
+    geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=5), legend.position = "top", legend.title = element_blank())+
+    labs(y = "Hauled Volume (m3)",
+         x= "",
+       title = paste("Total Hauled volume recorded in WISKI,", currentStart, "to", currentTrimester),
+       caption = "South Peel quantities not available from WISKI")+
+   coord_flip()+scale_x_discrete(limits = rev)
+
+p_wiskiHaulPlant
+
+ggsave(file=paste("export/", currentIssue, "/p_haulageByPlant.svg", sep=""), plot=p_wiskiHaulPlant, width=16, height=16)
+```
+
 
 # Manual things
 Do these on embedded excel
