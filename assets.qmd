@@ -19,6 +19,7 @@ execute:
 2. Find relevant assets in description field - DIGESTER, DEWATER, THICKEN, CENTRIFUGE, SLUDGE TANK, SLUDGE STORAGE, BIOSOLID TANK, BIOSOLID STORAGE, LAGOON  
 3. Combine redundant terms by location (4 digit id under Location field)  
 4. Simplify location to plant name (usually the string after first comma, some cases like Sanofi are standalone)
+N.B. Region of Waterloo not present in current Maximo extraction
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 library(leaflet)
@@ -370,3 +371,55 @@ geojson_write(
 #L.geoJSON(geojsonFeature).addTo(map);
 
 #tested successfully here - https://ocwa0.sharepoint.com/sites/OBRR/SitePages/test-map.aspx?Mode=Edit
+```
+
+
+```{r}
+library(sf)
+
+# the data file is queried with only "%WW%" to limit to ww assets 
+fnames <- fs::dir_ls('data/2-Facilities/', regexp = 'Master-List')
+fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
+dt_pcsFacilities <- suppressMessages(suppressWarnings(
+  bind_rows(lapply(fnames, read_excel, col_names = TRUE, trim_ws=TRUE, skip = 1))
+))
+
+dt_pcsFacilities<-janitor::clean_names(dt_pcsFacilities)
+dt_pcsFacilities$utm_e<-as.numeric(dt_pcsFacilities$utm_e)
+dt_pcsFacilities$utm_n<-as.numeric(dt_pcsFacilities$utm_n)
+dt_pcsFacilities$wwt<-as.factor(dt_pcsFacilities$wwt)
+dt_pcsFacilities  <- dt_pcsFacilities %>% drop_na(utm_e) %>% #sf does not permit empty
+  filter(!is.na(wwt)) 
+
+#about 30 facilities missing coords
+#500 facilities dropped once filtered for non-NA wwt (captures some non-registered, other facilities too)
+dt_pcsFacilities$wwt <- str_replace_all(dt_pcsFacilities$wwt, "Not Req.|Not Req|Not Reg|TBD", "Not req./TBD")
+
+#Conversion of data frame to sf object
+dt_pcsFacilities.sf<-st_as_sf(x = dt_pcsFacilities,                         
+                  coords = c("utm_e", "utm_n"), remove = FALSE,
+                  crs = "4326")
+
+#check works- plot(dt_pcsFacilities.sf$geometry)
+
+ggplot() +
+  geom_sf(data=dt_pcsFacilities.sf, size = 4, aes(color = wwt))+
+  labs(title = "Facilities") +
+  scale_color_viridis_d()
+```
+
+```{r}
+library(leaflet)
+pal <- leaflet::colorFactor(viridis_pal(option = "C")(5), domain = dt_pcsFacilities$wwt)
+
+leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>% 
+  addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt)) 
+
+# %>% 
+  # addLegend(
+  #   position = "bottomright",
+  #   colors = viridis_pal(option = "C")(5),
+  #   labels = wwt
+  # )
+```
+
