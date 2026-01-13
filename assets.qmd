@@ -340,7 +340,7 @@ writeLines(json_AssetsGeoLoc, "array_output.json")
 #this json is then manually copy & pasted into the embed snippet inside https://ocwa0.sharepoint.com/sites/OBRR/SitePages/maximoSolidsTrainAssets.aspx?Mode=Edit
 ```
 
-```{r}
+```{r,eval=FALSE}
 #convert json to  geojson 
 #https://gis.stackexchange.com/questions/73756/is-it-possible-to-convert-regular-json-to-geojson
 
@@ -407,19 +407,101 @@ ggplot() +
   labs(title = "Facilities") +
   scale_color_viridis_d()
 ```
-
+Basic
 ```{r}
 library(leaflet)
+library(leaflet.extras2) #provides search function
+
 pal <- leaflet::colorFactor(viridis_pal(option = "C")(5), domain = dt_pcsFacilities$wwt)
 
 leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>% 
-  addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt)) 
+  addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt), fill = FALSE) %>% 
+  addLegend(position = "bottomright",
+            pal=pal, values = ~wwt)
+```
 
-# %>% 
-  # addLegend(
-  #   position = "bottomright",
-  #   colors = viridis_pal(option = "C")(5),
-  #   labels = wwt
-  # )
+
+```{r}
+#join maximo assets to pcs facilities location & info, prep for mapping
+
+dt_pcsFacilities<-left_join(dt_pcsFacilities, dt_maximoAssets_wwSolids, by = join_by(org == loc_code))
+
+dt_pcsFacilities<- dt_pcsFacilities %>% 
+  dplyr::mutate(popupText = paste0(location_name,
+                               "<br/>LocCode:", org,
+                               "<br/>Type:", mecp_category))
+
+wwIcons <- iconList(
+  DIGESTER = makeIcon("https://icons.cdn.biorender.com/w75xh75/5ea0b6e3a1aad100287f0063/5ea0b5e3a1aad100287f005e.png","https://icons.cdn.biorender.com/w75xh75/5ea0b6e3a1aad100287f0063/5ea0b5e3a1aad100287f005e.png", 13, 20, iconAnchorX = 1, iconAnchorY = 1),
+  "SLUDGE STORAGE" = makeIcon("https://icons.cdn.biorender.com/w75xh75/6504b75c32b65c0c6b1bdfec/63c1b74228c02200215bdab2.png","https://icons.cdn.biorender.com/w75xh75/6504b75c32b65c0c6b1bdfec/63c1b74228c02200215bdab2.png", 13,13, iconAnchorX = 10, iconAnchorY = 10),
+  LAGOON = makeIcon("https://icons.cdn.biorender.com/w75xh75/5b5a4ef60bb8280014d9fa85/5b5a4d690bb8280014d9fa7c.png", "https://icons.cdn.biorender.com/w75xh75/5b5a4ef60bb8280014d9fa85/5b5a4d690bb8280014d9fa7c.png", 10,10,   iconAnchorX = -1, iconAnchorY = -1),
+  CENTRIFUGE = makeIcon("https://icons.cdn.biorender.com/w75xh75/65c10cbe7ea8a97b919caebe/65c10c5c7ea8a942ff9caea1.png", "https://icons.cdn.biorender.com/w75xh75/65c10cbe7ea8a97b919caebe/65c10c5c7ea8a942ff9caea1.png", 10,10,iconAnchorX = -2, iconAnchorY = -2),
+  "SLUDGE TANK" = makeIcon("https://icons.cdn.biorender.com/w75xh75/64887eff384a540020d0261f/64887e1e384a540020d0260a.png", "https://icons.cdn.biorender.com/w75xh75/64887eff384a540020d0261f/64887e1e384a540020d0260a.png", 10,10,iconAnchorX = 5, iconAnchorY = 5)
+    # ifelse(quakes1$mag < 4.6, #to use for aerobic v anaerobic in future
+    # "https://leafletjs.com/examples/custom-icons/leaf-green.png",
+    # "https://leafletjs.com/examples/custom-icons/leaf-red.png"
+  #),
+)
+
+map<-leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>% 
+    leaflet::addMarkers(
+    data = subset(x = dt_pcsFacilities, matched_keyword == "DIGESTER"),
+    lng = ~utm_e, lat = ~utm_n,
+    group = "Digester",
+    icon = ~wwIcons[matched_keyword],
+    options = markerOptions(opacity =0.6)
+  ) %>% 
+    leaflet::addMarkers(
+    data = subset(x = dt_pcsFacilities, matched_keyword == "SLUDGE STORAGE"),
+    lng = ~utm_e, lat = ~utm_n,
+    group = "Sludge Storage",
+    icon = ~wwIcons[matched_keyword],
+    options = markerOptions(opacity =0.6)
+  ) %>% 
+    leaflet::addMarkers(
+    data = subset(x = dt_pcsFacilities, matched_keyword == "SLUDGE TANK"),
+    lng = ~utm_e, lat = ~utm_n,
+    group = "Sludge Tank",
+    icon = ~wwIcons[matched_keyword],
+    options = markerOptions(opacity =0.6)
+  ) %>% 
+    leaflet::addMarkers(
+      data = subset(x = dt_pcsFacilities, matched_keyword == "LAGOON"),
+      lng = ~utm_e, lat = ~utm_n,
+      group = "Lagoon",
+      icon = ~wwIcons[matched_keyword],
+      options = markerOptions(opacity =0.6)
+    ) %>% 
+    leaflet::addMarkers(
+      data = subset(x = dt_pcsFacilities, matched_keyword == "CENTRIFUGE"),
+      lng = ~utm_e, lat = ~utm_n,
+      group = "Centrifuge",
+      icon = ~wwIcons[matched_keyword],
+      options = markerOptions(opacity =0.6)
+    ) %>% 
+  # controlling the groups
+  leaflet::addLayersControl(
+    overlayGroups = c("Digester", "Sludge Storage", "Sludge Tank", "Centrifuge", "Lagoon"),  # add these layers
+    options = layersControlOptions(collapsed = FALSE)
+    ) %>%   # expand on hover? 
+  addCircleMarkers(~utm_e, ~utm_n, group = 'facilities',
+                   color = ~pal(wwt), weight = 1, radius = 6, fill = FALSE,
+                   popup = ~as.character(popupText)) %>% 
+  addLegend(position = "bottomright", title = "wastewater facility class",
+            pal=pal, values = ~wwt)
+
+
+map <-map %>% addGeosearch()
+
+map
+```
+
+
+
+
+```{r}
+#export
+library(htmlwidgets)
+saveWidget(map, file = "PCSwwtf_MaximoSolidsAssets.html", selfcontained = TRUE)
 ```
 
