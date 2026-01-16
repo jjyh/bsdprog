@@ -373,10 +373,8 @@ geojson_write(
 #tested successfully here - https://ocwa0.sharepoint.com/sites/OBRR/SitePages/test-map.aspx?Mode=Edit
 ```
 
-
+# Load in coordinates from PCS
 ```{r}
-library(sf)
-
 # the data file is queried with only "%WW%" to limit to ww assets 
 fnames <- fs::dir_ls('data/2-Facilities/', regexp = 'Master-List')
 fnames <- fnames[!grepl("~", fnames)] #remove any temp files with ~
@@ -396,9 +394,13 @@ dt_pcsFacilities  <- dt_pcsFacilities %>% drop_na(utm_e) %>% #sf does not permit
 dt_pcsFacilities$wwt <- str_replace_all(dt_pcsFacilities$wwt, "Not Req.|Not Req|Not Reg|TBD", "Not req./TBD")
 
 #Conversion of data frame to sf object
+library(sf)
 dt_pcsFacilities.sf<-st_as_sf(x = dt_pcsFacilities,                         
                   coords = c("utm_e", "utm_n"), remove = FALSE,
                   crs = "4326")
+```
+
+```{r, eval = FALSE}
 
 #check works- plot(dt_pcsFacilities.sf$geometry)
 
@@ -414,10 +416,10 @@ library(leaflet.extras2) #provides search function
 
 pal <- leaflet::colorFactor(viridis_pal(option = "C")(5), domain = dt_pcsFacilities$wwt)
 
-leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>% 
-  addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt), fill = FALSE) %>% 
-  addLegend(position = "bottomright",
-            pal=pal, values = ~wwt)
+# leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>% 
+#   addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt), fill = FALSE) %>% 
+#   addLegend(position = "bottomright",
+#             pal=pal, values = ~wwt)
 ```
 
 
@@ -490,7 +492,6 @@ map<-leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>%
   addLegend(position = "bottomright", title = "wastewater facility class",
             pal=pal, values = ~wwt)
 
-
 map <-map %>% addGeosearch()
 
 map
@@ -502,6 +503,91 @@ map
 ```{r}
 #export
 library(htmlwidgets)
-saveWidget(map, file = "PCSwwtf_MaximoSolidsAssets.html", selfcontained = TRUE)
+saveWidget(map, file = "PCSwwtf_MaximoSolidsAssets.html")#, selfcontained = TRUE)
+```
+
+# WISKI recorded stabilization method and end destinations
+
+```{r}
+#read in metadata file
+dt_wiskiMeta<-read_excel('data/2-Facilities/All_WTF_WWTF_Metadata.xlsx', col_names = TRUE, trim_ws=TRUE) 
+
+#reducing down to fields of interest (35)
+dt_wiskiMeta<-dt_wiskiMeta %>% 
+  select(site_name, orgUnit, RegionList, ends_with(c("Capacity", "Flow")), starts_with(c("SludStabz", "SludgeDisp")))
+
+#if field has one, then fill it with split second part
+#anything starting with SludStabz or SludgeDisp, split by _
+#https://stackoverflow.com/questions/50138295/replace-column-values-with-column-name-using-dplyrs-transmute-all
+df <- dt_wiskiMeta %>%
+  mutate(across(
+    starts_with("Slud"),  
+    ~ str_replace(., "1",~ cur_column() )  # Replace first match boolean-exists with column name
+  ))
+
+df<-df  %>% 
+  pivot_longer(
+    cols = starts_with("SludStabz"), 
+#    names_to = "Stabilization", 
+#    names_prefix = "SludStabz",
+#    names_transform = as.integer,
+    values_to = "Stabilization"
+#    values_drop_na = TRUE,
+  )
+
+#pivot stabilization columns longer first - values will be both NA and 1's
+#only one parsing failure reported - row 17 St. Charles? to look into
+dt_wiskiMeta_stabilization<-dt_wiskiMeta  %>%
+  pivot_longer(
+    cols = starts_with("SludStabz"),
+    names_to = c("Stabilization"), 
+    names_pattern = "SludStabz_?(.*)",
+    names_transform = list(
+      Stabilization = ~ readr::parse_factor(.x, levels = c("AerobicDigest-Mul","AerobicDigest-1","Aerobic Digest-2","AnaerobicDigest-Mul","AnaerobicDigest-1","AnaerobicDigest-2","Decanting" ,"DecantingCentrifuge","Dewatering_Gravity","Dewatering_VacFilt","No Stabilization","Partial_Stabilized","SludgeDewatering",  "SludgeDryingBeds","SludgeThickening","Tilled"))
+    ),
+    values_to = "StabilizationBoolean"
+)
+
+#NB second pivot
+#pivot destination columns longer - values will be both NA and 1's
+#55k rows result
+dt_wiskiMeta_EndDestination<-dt_wiskiMeta %>%
+  pivot_longer(
+    cols = starts_with("SludgeDisp"),
+    names_to = c("EndDestination"), 
+    names_pattern = "SludgeDisp_?(.*)",
+    names_transform = list(
+      EndDestination = ~ readr::parse_factor(.x, levels = c("Agricultural Land","Blended By Hauler","Dewatering","Drying Bed(S)","Incineration","Lagoon Storage","Landfill","Rem_Hauler2CertifRec", "Stabilize_HaulerLagoon","Transfer2AnotherFac","Not Applicable"))
+    ),
+    values_to = "EndDestBoolean"
+)
+
+#Replace Boolean columns with corresponding string description
+#Drop row which are NA in BOTH Boolean columns
+
+
+
+#Rename Boolean
+df <- df %>%
+  mutate(EndDestBoolean = if_else(EndDestBoolean==1, EndDestination, NA)) %>% 
+  mutate(StabilizationBoolean = if_else(StabilizationBoolean==1, Stabilization, NA)) %>% 
+  filter(!(is.na(StabilizationBoolean)& is.na(EndDestBoolean))) 
+
+%>% 
+  select()
+  rename()
+  
+
+
+
+
+
+
+#haulage volume is separate (biosolidlocations)
+
+
+#map waffles
+#https://medium.com/data-science/mapping-convenience-stores-with-waffle-grids-d0196901418a
+
 ```
 

@@ -613,42 +613,6 @@ pal <- colorFactor(c("pink", "turquoise", "blue", "green","purple", "orange", "g
 map_geo<-dt_loc_py %>% 
   leaflet::leaflet() %>%
   leaflet::addProviderTiles(providers$OpenStreetMap.HOT)%>% #Thunderforest.Transport is better but not loadiing...api key needed?
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Saturday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Saturday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Sunday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Sunday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Monday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Monday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Tuesday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Tuesday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Wednesday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Wednesday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Thursday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Thursday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
   addCircleMarkers(data = subset(dt_loc_py, !is.na(Friday)),
                    lng = ~lng, lat = ~lat, 
                    group = "Friday",
@@ -656,7 +620,7 @@ map_geo<-dt_loc_py %>%
                    radius = 9,
                    color = ~pal(Category)) %>% 
   addLegend(pal = pal, values = ~Category, position = "bottomleft") %>%
-  addLayersControl(overlayGroups = c("Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"),
+  addLayersControl(overlayGroups = c("Friday"),
                    options = layersControlOptions(collapsed = FALSE))
 ```
 
