@@ -516,6 +516,20 @@ dt_wiskiMeta<-read_excel('data/2-Facilities/All_WTF_WWTF_Metadata.xlsx', col_nam
 dt_wiskiMeta<-dt_wiskiMeta %>% 
   select(site_name, orgUnit, RegionList, ends_with(c("Capacity", "Flow")), starts_with(c("SludStabz", "SludgeDisp")))
 
+#unit conversion (#1343 is wrong 60 and 60000L/day)
+dt_wiskiMeta<-dt_wiskiMeta %>% 
+  mutate(`Total Design Capacity`= if_else(`Unit Total Capacity`== "L/day", `Total Design Capacity`/1000, `Total Design Capacity`))%>% 
+    mutate(`Total Design Capacity`=if_else(`Unit Total Capacity`== "ML/day", `Total Design Capacity`*1000, `Total Design Capacity`)) %>% 
+    mutate(`Total Design Capacity`=if_else(`Unit Total Capacity`== "1000m3/day", `Total Design Capacity`*1000, `Total Design Capacity`)) 
+
+dt_wiskiMeta$`Unit Total Capacity`<-str_replace_all(dt_wiskiMeta$`Unit Total Capacity`, "L/day|ML/day|1000m3/day", "m3/day")
+
+dt_wiskiMeta<-dt_wiskiMeta %>% 
+  mutate(`Design Average Day Flow`= if_else(`Unit Average Day Flow`== "L/day", `Design Average Day Flow`/1000, `Design Average Day Flow`))%>% 
+    mutate(`Design Average Day Flow`=if_else(`Unit Average Day Flow`== "ML/day", `Design Average Day Flow`*1000, `Design Average Day Flow`)) 
+
+dt_wiskiMeta$`Unit Average Day Flow`<-str_replace_all(dt_wiskiMeta$`Unit Average Day Flow`, "L/day|ML/day", "m3/day")
+
 #if field has one, then fill it with split second part
 #anything starting with SludStabz or SludgeDisp, split by _
 #https://stackoverflow.com/questions/50138295/replace-column-values-with-column-name-using-dplyrs-transmute-all
@@ -563,31 +577,30 @@ dt_wiskiMeta_EndDestination<-dt_wiskiMeta %>%
 )
 
 #Replace Boolean columns with corresponding string description
-#Drop row which are NA in BOTH Boolean columns
+#Drop row which are NA in BOTH Boolean columns, or are just interim like dewatering and drying
+dt_wiskiMeta_EndDestination <- dt_wiskiMeta_EndDestination %>%
+  mutate(EndDestBoolean = if_else(EndDestBoolean==1, EndDestination, NA)) %>% 
+  filter(!(is.na(EndDestBoolean))) %>%
+  filter(!(EndDestination == "Dewatering")) %>% 
+  filter(!(EndDestination == "Drying Bed(S)"))
+
+# Calculate counts and percentages - works but not really useful as it's % of counts not volumes as one'd naturally expect
+# dt_wiskiMeta_EndDestinationSummary<-dt_wiskiMeta_EndDestination %>%
+#   count(EndDestination) %>%
+#   mutate(percentageEndDestination = n / sum(n) * 100)
 
 
-
-#Rename Boolean
+# needs working on to combine end dest and stabilization
 df <- df %>%
   mutate(EndDestBoolean = if_else(EndDestBoolean==1, EndDestination, NA)) %>% 
   mutate(StabilizationBoolean = if_else(StabilizationBoolean==1, Stabilization, NA)) %>% 
   filter(!(is.na(StabilizationBoolean)& is.na(EndDestBoolean))) 
 
-%>% 
-  select()
-  rename()
-  
+```
 
-
-
-
-
-
-#haulage volume is separate (biosolidlocations)
-
-
-#map waffles
-#https://medium.com/data-science/mapping-convenience-stores-with-waffle-grids-d0196901418a
-
+```{r}
+# bring over wiski snapshot to show
+# waffle valume map
+# what level of dryness where and what type of technology (use maximo not wiski...)
 ```
 
