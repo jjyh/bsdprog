@@ -23,6 +23,7 @@ N.B. Region of Waterloo not present in current Maximo extraction
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 library(leaflet)
+library(leaflet.extras2) #provides search function
 library(janitor)
 library(tidyr)
 library(dplyr)
@@ -248,15 +249,17 @@ p_maximoAssets_wwSolids
     fmt_missing(columns = everything(), missing_text = '-') %>%
     tab_options(table.font.names = 'Arial', heading.align = 'left')
 ```
+
+
 ```{r, eval = FALSE}
 # Create a filterable table with key columns - DT does not work at in Sharepoint
-dt_maximoAssets_wwSolids %>%
+tbl_maximoAssets_wwSolids<-dt_maximoAssets_wwSolids %>%
   select(loc_code, loc_name, matched_keyword) %>%
   arrange(loc_name, matched_keyword) %>%
   datatable(
     filter = 'top',
     options = list(
-      pageLength = 15,
+      pageLength = 10,
       autoWidth = TRUE,
       columnDefs = list(
         list(width = '100px', targets = c(0, 2)),
@@ -269,10 +272,14 @@ dt_maximoAssets_wwSolids %>%
       paste("Click on column headers to sort; use search boxes to filter | Data as of:", format(code_run_date, "%B %d, %Y"))
     )
   )
+
+tbl_maximoAssets_wwSolids
 ```
+
+
 ```{r, eval = FALSE}
 # Create a gt version of the same table - doesn't work on sharepoint (bc of interactivity?)
-dt_maximoAssets_wwSolids %>%
+gt_dt_maximoAssets_wwSolids<-dt_maximoAssets_wwSolids %>%
   select(loc_code, loc_name, matched_keyword) %>%
   arrange(loc_name, matched_keyword) %>%
   mutate(loc_code = as.character(loc_code)) %>%
@@ -292,6 +299,8 @@ dt_maximoAssets_wwSolids %>%
   tab_source_note(md(paste('Data as of:', format(code_run_date, '%B %d, %Y')))) %>%
   fmt_missing(columns = everything(), missing_text = '-') %>%
   tab_options(table.font.names = 'Arial', heading.align = 'left')
+
+gt_dt_maximoAssets_wwSolids
 ```
 
 ```{r}
@@ -411,15 +420,14 @@ ggplot() +
 ```
 Basic
 ```{r}
-library(leaflet)
-library(leaflet.extras2) #provides search function
-
 pal <- leaflet::colorFactor(viridis_pal(option = "C")(5), domain = dt_pcsFacilities$wwt)
 
-# leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>% 
-#   addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt), fill = FALSE) %>% 
-#   addLegend(position = "bottomright",
-#             pal=pal, values = ~wwt)
+basicMap<-leaflet(dt_pcsFacilities) %>% addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(~utm_e, ~utm_n, color = ~pal(wwt), fill = FALSE) %>%
+  addLegend(position = "bottomright",
+            pal=pal, values = ~wwt)
+
+basicMap
 ```
 
 
@@ -596,11 +604,12 @@ df <- df %>%
   mutate(StabilizationBoolean = if_else(StabilizationBoolean==1, Stabilization, NA)) %>% 
   filter(!(is.na(StabilizationBoolean)& is.na(EndDestBoolean))) 
 
+#number of plants utilizing end destination type
 ```
 
 ```{r}
 # bring over wiski snapshot to show
-# waffle valume map
+# waffle volume map
 # what level of dryness where and what type of technology (use maximo not wiski...)
 ```
 
