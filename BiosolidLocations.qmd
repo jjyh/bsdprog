@@ -47,8 +47,7 @@ The core program will canvas the current state of residuals handling in OCWA fac
 1.  OCWA facilities metadata, e.g. location, permit, hub, client, population, holding capacity, treatment process, geographical context
 2.  Inventory of residuals quantity and quality
 3.  Market landscape including reference regional and quality-based ranges. Both external costs (hauling & disposal), climate impacts, and nutrient/NASM valuation\
-4.  Lagoons, e.g. status, inspections, clean-out undertakings
-5.  Policy, regulations, and emerging issues review
+4.  Policy, regulations, and emerging issues review
 
 Useable outcomes from the above inventory canvassing work:
 
@@ -560,70 +559,8 @@ plot(loc_kml[1])
 
 ```
 
-Start python
-```{r, eval=FALSE}
-Sys.setenv(RETICULATE_PYTHON = "C:/Users/hoja/AppData/Local/anaconda3")
-```
-
-reticulate::repl_python() 
-
-```{python, eval=FALSE}
-import pandas as pd
-from geopy.geocoders import Nominatim #had to pip install this first
-
-#Using Nominatim with the default user_agent is strongly discouraged, as it violates Nominatim’s Usage Policy https://operations.osmfoundation.org/policies/nominatim/ and may possibly cause 403 and 429 HTTP errors. Please make sure to specify a custom user_agent with Nominatim(user_agent="my-application")
-geolocator = Nominatim(user_agent="myApp")
-
-dt_loc_py = r.dt_loc #import df from R to Py https://nrennie.rbind.io/blog/combining-r-and-python-with-reticulate-and-quarto/
-
-#claims to have no attribute latitude
-# dt_loc_py[['location_lat', 'location_long']] = dt_loc_py['Address'].apply(geolocator.geocode).apply(lambda x: pd.Series([x.latitude, x.longitude], index=['location_lat', 'location_long']))
-
-# dt_loc_py[['location']] = dt_loc_py['Address'].apply(geolocator.geocode) # this doesn't work unless all addresses can be found - number will mismatch
-
-#this works
-# geolocator.geocode(dt_loc_py['Address'][1])
-# geolocator.geocode(dt_loc_py['Address'][1]).latitude
-```
-
-```{python, eval=FALSE}
-lat = [] 
-longi = [] 
-location = [] 
-
-for places in dt_loc_py['Address']:
-  location.append(geolocator.geocode(places, timeout=100)) #, timeout=100
-  lat.append(location[len(location)-1].latitude)
-  longi.append(location[len(location)-1].longitude) 
-  
-#match back to df 
-dt_loc_py['lat'] = lat 
-dt_loc_py['longi'] = longi 
-```
 
 #Map
-```{r, eval=FALSE}
-dt_loc_py<-py$dt_loc_py#[-ncol(py$dt_loc_py)]#drop last column coz it's a mess
-dt_loc_py<-dt_loc_py %>% rename(lng = longi)
-dt_loc_py$Category<-as.factor(dt_loc_py$Category) # Create a palette that maps factor levels to colors 
-pal <- colorFactor(c("pink", "turquoise", "blue", "green","purple", "orange", "gray", "black"), domain = c("Food", "Sight","Sight, Food", "Shop, sight","Shop", "Activity", "Base", "NA"))
-```
-
-```{r, eval=FALSE}
-map_geo<-dt_loc_py %>% 
-  leaflet::leaflet() %>%
-  leaflet::addProviderTiles(providers$OpenStreetMap.HOT)%>% #Thunderforest.Transport is better but not loadiing...api key needed?
-  addCircleMarkers(data = subset(dt_loc_py, !is.na(Friday)),
-                   lng = ~lng, lat = ~lat, 
-                   group = "Friday",
-                   popup = ~Place,
-                   radius = 9,
-                   color = ~pal(Category)) %>% 
-  addLegend(pal = pal, values = ~Category, position = "bottomleft") %>%
-  addLayersControl(overlayGroups = c("Friday"),
-                   options = layersControlOptions(collapsed = FALSE))
-```
-
 
 
 Location of plants with landfilled biosolids
@@ -676,6 +613,7 @@ ggplotly(p_volLow)
 ```
 
 ## Lagoons
+Lagoons, e.g. status, inspections, clean-out undertakings
 no depths collected in key sheet
 assume 1.5m in facultative - typical WW (but then to storage cells)
 (4m aerated and 0.45 in aerobic)
